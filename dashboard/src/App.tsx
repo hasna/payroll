@@ -23,10 +23,17 @@ interface PayrollRun {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<"employees" | "payroll">("employees");
+  const [activeTab, setActiveTab] = useState<"employees" | "payroll" | "dashboard">("employees");
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [runs, setRuns] = useState<PayrollRun[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState<{
+    payrollTrend: Array<{period: string; gross: number; net: number; employees: number; status: string}>;
+    deptBreakdown: Array<{department: string; count: number}>;
+    statusBreakdown: Array<{status: string; count: number}>;
+    ptoSummary: Array<{type: string; total: number; used: number; remaining: number}>;
+    monthlyPayroll: Array<{month: string; gross: number; net: number; employees: number}>;
+  } | null>(null);
 
   useEffect(() => {
     fetch("http://localhost:3010/api/employees")
@@ -39,6 +46,15 @@ function App() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "dashboard" && !dashboardData) {
+      fetch("http://localhost:3010/api/dashboard")
+        .then(res => res.json())
+        .then(data => setDashboardData(data))
+        .catch(console.error);
+    }
+  }, [activeTab]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -71,6 +87,16 @@ function App() {
                 }`}
               >
                 Payroll Runs
+              </button>
+              <button
+                onClick={() => setActiveTab("dashboard")}
+                className={`py-4 px-6 font-medium text-sm ${
+                  activeTab === "dashboard"
+                    ? "border-b-2 border-blue-500 text-blue-600"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Dashboard
               </button>
             </nav>
           </div>
@@ -168,6 +194,130 @@ function App() {
                       ))}
                     </tbody>
                   </table>
+                )}
+              </div>
+            )}
+
+            {activeTab === "dashboard" && (
+              <div>
+                <h2 className="text-lg font-medium mb-6">Analytics</h2>
+                {!dashboardData ? (
+                  <p className="text-gray-500 text-center py-8">Loading...</p>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Payroll Trend Chart */}
+                    <div className="border rounded-lg p-4">
+                      <h3 className="font-medium mb-4">Payroll Trend (Gross vs Net)</h3>
+                      {dashboardData.payrollTrend.length === 0 ? (
+                        <p className="text-gray-400 text-sm">No payroll runs yet</p>
+                      ) : (
+                        <svg viewBox="0 0 400 200" className="w-full">
+                          {(() => {
+                            const data = dashboardData.payrollTrend.slice(0, 8).reverse();
+                            const max = Math.max(...data.map(d => d.gross), 1);
+                            const barW = 40;
+                            const gap = 8;
+                            const offsetX = 30;
+                            const chartH = 160;
+                            return (
+                              <>
+                                <line x1="30" y1="10" x2="30" y2="165" stroke="#e5e7eb" strokeWidth="1" />
+                                <line x1="30" y1="165" x2="390" y2="165" stroke="#e5e7eb" strokeWidth="1" />
+                                {data.map((d, i) => {
+                                  const x = offsetX + i * (barW + gap);
+                                  const grossH = (d.gross / max) * chartH;
+                                  const netH = (d.net / max) * chartH;
+                                  return (
+                                    <g key={i}>
+                                      <rect x={x} y={165 - grossH} width={barW / 2 - 2} height={grossH} fill="#3b82f6" rx="2" opacity="0.7" />
+                                      <rect x={x + barW / 2 + 2} y={165 - netH} width={barW / 2 - 2} height={netH} fill="#10b981" rx="2" />
+                                    </g>
+                                  );
+                                })}
+                                <text x="5" y="15" fontSize="9" fill="#9ca3af">${(max / 1000).toFixed(0)}k</text>
+                                <text x="5" y="90" fontSize="9" fill="#9ca3af">${(max / 2000 / 1000).toFixed(1)}k</text>
+                              </>
+                            );
+                          })()}
+                        </svg>
+                      )}
+                      <div className="flex gap-4 mt-2 text-xs">
+                        <span className="flex items-center gap-1"><span className="w-3 h-3 bg-blue-400 rounded" /> Gross</span>
+                        <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-400 rounded" /> Net</span>
+                      </div>
+                    </div>
+
+                    {/* Department Breakdown */}
+                    <div className="border rounded-lg p-4">
+                      <h3 className="font-medium mb-4">Employees by Department</h3>
+                      {dashboardData.deptBreakdown.length === 0 ? (
+                        <p className="text-gray-400 text-sm">No data</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {dashboardData.deptBreakdown.map((d) => {
+                            const total = dashboardData.deptBreakdown.reduce((s, x) => s + x.count, 0);
+                            const pct = total > 0 ? (d.count / total) * 100 : 0;
+                            return (
+                              <div key={d.department}>
+                                <div className="flex justify-between text-sm mb-1">
+                                  <span>{d.department}</span>
+                                  <span className="text-gray-500">{d.count} ({pct.toFixed(0)}%)</span>
+                                </div>
+                                <div className="w-full bg-gray-100 rounded-full h-2">
+                                  <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${pct}%` }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* PTO Summary */}
+                    <div className="border rounded-lg p-4">
+                      <h3 className="font-medium mb-4">PTO Summary</h3>
+                      {dashboardData.ptoSummary.length === 0 ? (
+                        <p className="text-gray-400 text-sm">No PTO data</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {dashboardData.ptoSummary.map((d) => {
+                            const pct = d.total > 0 ? (d.used / d.total) * 100 : 0;
+                            return (
+                              <div key={d.type}>
+                                <div className="flex justify-between text-sm mb-1">
+                                  <span className="capitalize">{d.type}</span>
+                                  <span className="text-gray-500">{d.remaining} days left ({d.used}/{d.total})</span>
+                                </div>
+                                <div className="w-full bg-gray-100 rounded-full h-2">
+                                  <div className="bg-amber-400 h-2 rounded-full" style={{ width: `${pct}%` }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Status Breakdown */}
+                    <div className="border rounded-lg p-4">
+                      <h3 className="font-medium mb-4">Employee Status</h3>
+                      {dashboardData.statusBreakdown.length === 0 ? (
+                        <p className="text-gray-400 text-sm">No data</p>
+                      ) : (
+                        <div className="flex gap-4 flex-wrap">
+                          {dashboardData.statusBreakdown.map((d) => {
+                            const colors: Record<string, string> = { active: "bg-green-500", inactive: "bg-gray-400", terminated: "bg-red-400" };
+                            return (
+                              <div key={d.status} className="flex items-center gap-2">
+                                <span className={`w-4 h-4 rounded ${colors[d.status] || "bg-gray-300"}`} />
+                                <span className="text-sm capitalize">{d.status}: {d.count}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
