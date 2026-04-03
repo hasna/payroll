@@ -1,6 +1,6 @@
 {
   "name": "@hasna/payroll",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Open-source payroll management system for AI agents - CLI + MCP server + web dashboard",
   "type": "module",
   "main": "dist/index.js",
