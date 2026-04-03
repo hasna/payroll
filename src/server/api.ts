@@ -65,6 +65,17 @@ app.get("/api/stats", (req, res) => {
   }
 });
 
+// Health check
+app.get("/api/health", (req, res) => {
+  try {
+    const db = getDatabase();
+    db.query("SELECT 1").get();
+    res.json({ status: "healthy", timestamp: new Date().toISOString() });
+  } catch (error) {
+    res.status(503).json({ status: "unhealthy", error: String(error) });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Payroll API server running on http://localhost:${PORT}`);
 });
