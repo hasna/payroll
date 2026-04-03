@@ -316,6 +316,36 @@ CREATE TABLE IF NOT EXISTS webhooks (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS organizations (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  country TEXT,
+  currency TEXT DEFAULT 'USD',
+  fiscal_year_start INTEGER DEFAULT 1,
+  metadata TEXT DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS scheduled_payrolls (
+  id TEXT PRIMARY KEY,
+  org_id TEXT REFERENCES organizations(id) ON DELETE CASCADE,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  frequency TEXT NOT NULL CHECK(frequency IN ('weekly', 'biweekly', 'monthly', 'quarterly', 'annual')),
+  day_of_month INTEGER CHECK(day_of_month BETWEEN 1 AND 31),
+  day_of_week INTEGER CHECK(day_of_week BETWEEN 0 AND 6),
+  period_start_offset INTEGER NOT NULL DEFAULT 0,
+  period_end_offset INTEGER NOT NULL DEFAULT 0,
+  auto_approve INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  last_run_at TEXT,
+  next_run_at TEXT,
+  metadata TEXT DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 let db: Database | null = null;

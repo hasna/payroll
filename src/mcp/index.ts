@@ -32,6 +32,7 @@ import { getDatabase, resolvePartialId, generateId } from "../db/database.js";
 import type { Employee, PayrollRun } from "../types/index.js";
 import { createAuditLog, listAuditLogs } from "../lib/audit.js";
 import { createWebhook, listWebhooks, getWebhook, updateWebhook, deleteWebhook, triggerWebhooks, type WebhookEvent } from "../lib/webhooks.js";
+import { createScheduledPayroll, listScheduledPayrolls, getScheduledPayroll, updateScheduledPayroll, deleteScheduledPayroll, runScheduledPayrolls, computeNextRun } from "../lib/scheduler.js";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -738,7 +739,107 @@ server.tool(
   }
 );
 
-// === WEBHOOK TOOLS ===
+// === RECURRING SCHEDULER TOOLS ===
+
+server.tool(
+  "create_scheduled_payroll",
+  "Create a recurring payroll schedule",
+  {
+    name: z.string().describe("Schedule name"),
+    frequency: z.enum(["weekly", "biweekly", "monthly", "quarterly", "annual"]).describe("Pay frequency"),
+    project_id: z.string().optional().describe("Project ID"),
+    org_id: z.string().optional().describe("Organization ID"),
+    day_of_month: z.number().min(1).max(31).optional().describe("Day of month for monthly/quarterly/annual"),
+    day_of_week: z.number().min(0).max(6).optional().describe("Day of week for weekly (0=Sunday)"),
+    period_start_offset: z.number().optional().describe("Days before pay day to start period (default 0)"),
+    period_end_offset: z.number().optional().describe("Days before pay day to end period (default 0)"),
+    auto_approve: z.boolean().optional().describe("Auto-approve runs (default false)"),
+  },
+  async ({ name, frequency, project_id, org_id, day_of_month, day_of_week, period_start_offset, period_end_offset, auto_approve }) => {
+    const schedule = createScheduledPayroll({ name, frequency, project_id, org_id, day_of_month, day_of_week, period_start_offset, period_end_offset, auto_approve });
+    return { content: [{ type: "text", text: JSON.stringify(schedule, null, 2) }] };
+  }
+);
+
+server.tool(
+  "list_scheduled_payrolls",
+  "List recurring payroll schedules",
+  {
+    active_only: z.boolean().optional().describe("Filter to active only"),
+    project_id: z.string().optional(),
+    org_id: z.string().optional(),
+  },
+  async ({ active_only, project_id, org_id }) => {
+    const schedules = listScheduledPayrolls({ active: active_only, project_id, org_id });
+    return { content: [{ type: "text", text: JSON.stringify(schedules, null, 2) }] };
+  }
+);
+
+server.tool(
+  "get_scheduled_payroll",
+  "Get a scheduled payroll by ID",
+  { id: z.string().describe("Schedule ID") },
+  async ({ id }) => {
+    const schedule = getScheduledPayroll(id);
+    if (!schedule) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify(schedule, null, 2) }] };
+  }
+);
+
+server.tool(
+  "update_scheduled_payroll",
+  "Update a recurring payroll schedule",
+  {
+    id: z.string().describe("Schedule ID"),
+    name: z.string().optional(),
+    frequency: z.enum(["weekly", "biweekly", "monthly", "quarterly", "annual"]).optional(),
+    day_of_month: z.number().min(1).max(31).optional(),
+    day_of_week: z.number().min(0).max(6).optional(),
+    period_start_offset: z.number().optional(),
+    period_end_offset: z.number().optional(),
+    auto_approve: z.boolean().optional(),
+    active: z.boolean().optional(),
+  },
+  async ({ id, ...input }) => {
+    const schedule = updateScheduledPayroll(id, input);
+    if (!schedule) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify(schedule, null, 2) }] };
+  }
+);
+
+server.tool(
+  "delete_scheduled_payroll",
+  "Delete a recurring payroll schedule",
+  { id: z.string().describe("Schedule ID") },
+  async ({ id }) => {
+    const deleted = deleteScheduledPayroll(id);
+    return { content: [{ type: "text", text: JSON.stringify({ success: deleted, id }) }] };
+  }
+);
+
+server.tool(
+  "trigger_scheduled_payrolls",
+  "Manually trigger all due scheduled payroll runs",
+  {},
+  async () => {
+    const result = await runScheduledPayrolls();
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+server.tool(
+  "preview_next_pay_date",
+  "Preview the next pay date for a schedule",
+  {
+    frequency: z.enum(["weekly", "biweekly", "monthly", "quarterly", "annual"]).describe("Pay frequency"),
+    day_of_month: z.number().min(1).max(31).optional(),
+    day_of_week: z.number().min(0).max(6).optional(),
+  },
+  async ({ frequency, day_of_month, day_of_week }) => {
+    const next = computeNextRun(frequency, day_of_month ?? 1, day_of_week ?? 0);
+    return { content: [{ type: "text", text: JSON.stringify({ frequency, next_pay_date: next }, null, 2) }] };
+  }
+);
 
 server.tool(
   "create_webhook",
