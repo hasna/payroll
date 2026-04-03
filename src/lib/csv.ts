@@ -48,26 +48,3 @@ export function exportEmployeeReportCSV(employeeId: string): string {
 
   return toCSV(["type", "id", "first_name", "last_name", "department", "position", "base_salary", "bonus_type", "amount", "pto_type", "total_days", "used_days", "status", "period_start", "period_end"], rows);
 }
-
-export function parseEmployeesCSV(csv: string): Record<string, string>[] {
-  const lines = csv.trim().split("\n");
-  if (lines.length < 2) return [];
-
-  const headers = lines[0].split(",").map(h => h.trim());
-  const employees: Record<string, string>[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(",");
-    const row: Record<string, string> = {};
-    headers.forEach((h, idx) => {
-      let val = values[idx]?.trim() || "";
-      if (val.startsWith('"') && val.endsWith('"')) {
-        val = val.slice(1, -1).replace(/""/g, '"');
-      }
-      row[h] = val;
-    });
-    employees.push(row);
-  }
-
-  return employees;
-}

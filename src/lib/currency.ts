@@ -79,12 +79,3 @@ export function listSupportedCurrencies(): Array<{ code: string; rate_to_usd: nu
     .map(([code, rate]) => ({ code, rate_to_usd: rate }))
     .sort((a, b) => a.code.localeCompare(b.code));
 }
-
-export function formatCurrency(amount: number, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currency.toUpperCase(),
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}

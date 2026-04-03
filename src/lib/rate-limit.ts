@@ -44,6 +44,7 @@ export function rateLimitMiddleware(config: RateLimitConfig) {
   };
 }
 
-export function clearRateLimitStore(): void {
+// Internal only - useful for testing
+function clearRateLimitStore(): void {
   store.clear();
 }
