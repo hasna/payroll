@@ -4,6 +4,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   createEmployee,
+  createEmployeeIfNotExists,
+  upsertEmployee,
   getEmployee,
   getEmployeeByEmail,
   listEmployees,
@@ -135,6 +137,43 @@ server.tool(
       project_id,
       org_id,
     });
+    return { content: [{ type: "text", text: JSON.stringify(employee, null, 2) }] };
+  }
+);
+
+server.tool(
+  "create_employee_if_not_exists",
+  "Create employee only if email/number doesn't exist (idempotent)",
+  {
+    first_name: z.string().describe("Employee first name"),
+    last_name: z.string().describe("Employee last name"),
+    email: z.string().email().optional().describe("Email address"),
+    employee_number: z.string().optional().describe("Employee number"),
+    department: z.string().optional().describe("Department"),
+    position: z.string().optional().describe("Position"),
+    base_salary: z.number().positive().optional().describe("Annual base salary"),
+  },
+  async (args) => {
+    const employee = createEmployeeIfNotExists(args);
+    return { content: [{ type: "text", text: JSON.stringify(employee, null, 2) }] };
+  }
+);
+
+server.tool(
+  "upsert_employee",
+  "Update existing or create new employee by email (idempotent)",
+  {
+    email: z.string().email().describe("Email to lookup and set"),
+    first_name: z.string().optional().describe("First name"),
+    last_name: z.string().optional().describe("Last name"),
+    department: z.string().optional().describe("Department"),
+    position: z.string().optional().describe("Position"),
+    base_salary: z.number().positive().optional().describe("Annual base salary"),
+    status: z.enum(["active", "inactive", "terminated"]).optional().describe("Status"),
+  },
+  async (args) => {
+    const { email, ...rest } = args;
+    const employee = upsertEmployee(email, rest);
     return { content: [{ type: "text", text: JSON.stringify(employee, null, 2) }] };
   }
 );

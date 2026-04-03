@@ -147,6 +147,25 @@ export function createEmployee(input: CreateEmployeeInput, db?: Database): Emplo
   return getEmployee(id, d)!;
 }
 
+export function createEmployeeIfNotExists(input: CreateEmployeeInput): Employee {
+  if (input.email) {
+    const existing = getEmployeeByEmail(input.email);
+    if (existing) return existing;
+  }
+  if (input.employee_number) {
+    const d = getDatabase();
+    const byNumber = d.query("SELECT * FROM employees WHERE employee_number = ?").get(input.employee_number) as EmployeeRow | undefined;
+    if (byNumber) return updateEmployee(byNumber.id, input) || byNumber;
+  }
+  return createEmployee(input);
+}
+
+export function upsertEmployee(lookupEmail: string, input: CreateEmployeeInput): Employee {
+  const existing = getEmployeeByEmail(lookupEmail);
+  if (existing) return updateEmployee(existing.id, input) || existing;
+  return createEmployee({ ...input, email: lookupEmail });
+}
+
 export function getEmployee(id: string, db?: Database): Employee | null {
   const d = db || getDatabase();
   const row = d.query("SELECT * FROM employees WHERE id = ?").get(id) as EmployeeRow | undefined;
