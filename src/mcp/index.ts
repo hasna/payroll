@@ -24,6 +24,7 @@ import {
   updatePayrollRun,
   deletePayrollRun,
   calculatePayrollRun,
+  calculatePayrollRunDryRun,
 } from "../db/payroll-runs.js";
 import { createBonus, getBonus, listBonuses, updateBonus, deleteBonus, getEmployeeBonusTotal } from "../db/bonuses.js";
 import { createPTOBalance, getEmployeePTOBalance, createPTORequest, listPTORequests, approvePTORequest, rejectPTORequest } from "../db/pto.js";
@@ -383,8 +384,13 @@ server.tool(
   "Calculate payroll for a run",
   {
     id: z.string().describe("Payroll run ID"),
+    dry_run: z.boolean().optional().default(false).describe("If true, compute totals without persisting changes"),
   },
-  async ({ id }) => {
+  async ({ id, dry_run }) => {
+    if (dry_run) {
+      const result = calculatePayrollRunDryRun(id);
+      return { content: [{ type: "text", text: JSON.stringify({ dry_run: true, ...result }, null, 2) }] };
+    }
     const run = calculatePayrollRun(id);
     createAuditLog({
       entity_type: "payroll_run",

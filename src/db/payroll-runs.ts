@@ -230,39 +230,62 @@ export function deletePayrollRun(id: string, db?: Database): void {
   d.run("DELETE FROM payroll_runs WHERE id = ?", [id]);
 }
 
-export function calculatePayrollRun(id: string, db?: Database): PayrollRun {
-  const d = db || getDatabase();
-  const run = getPayrollRun(id, d);
+export interface PayrollCalculationResult {
+  payroll_run_id: string;
+  period_start: string;
+  period_end: string;
+  employees: EmployeePayrollDetail[];
+  total_gross: number;
+  total_deductions: number;
+  total_net: number;
+  total_employees: number;
+}
 
-  if (!run) {
-    throw new PayrollRunNotFoundError(id);
-  }
+export interface EmployeePayrollDetail {
+  employee_id: string;
+  first_name: string;
+  last_name: string;
+  gross: number;
+  deductions: DeductionDetail[];
+  net: number;
+}
 
-  // Get all active employees for this project/org
-  const employees = d.query(`
-    SELECT * FROM employees
-    WHERE (project_id = ? OR (project_id IS NULL AND org_id = ?))
-    AND status = 'active'
-  `).all(run.project_id ?? null, run.org_id ?? null) as EmployeeRow[];
+export interface DeductionDetail {
+  type: string;
+  amount: number;
+  pre_tax: boolean;
+}
 
+function computePayrollDetails(id: string, run: PayrollRun, employees: EmployeeRow[], d: Database): { employeeDetails: EmployeePayrollDetail[]; totalGross: number; totalDeductions: number; totalNet: number } {
+  const employeeDetails: EmployeePayrollDetail[] = [];
   let totalGross = 0;
   let totalDeductions = 0;
   let totalNet = 0;
 
   for (const emp of employees) {
-    // Get salary components for this employee
+    // Get salary components
     const components = d.query(`
       SELECT * FROM salary_components
       WHERE employee_id = ? AND (payroll_run_id = ? OR (payroll_run_id IS NULL AND recurring = 1))
     `).all(emp.id, id) as SalaryComponentRow[];
 
     let employeeGross = 0;
-    let employeeDeductions = 0;
+    const deductionDetails: DeductionDetail[] = [];
 
     for (const comp of components) {
       if (comp.taxable) {
         employeeGross += comp.amount;
       }
+    }
+
+    // Get bonuses
+    const bonuses = d.query(`
+      SELECT * FROM bonuses
+      WHERE employee_id = ? AND payroll_run_id = ?
+    `).all(emp.id, id) as BonusRow[];
+
+    for (const bonus of bonuses) {
+      employeeGross += bonus.amount;
     }
 
     // Get deductions
@@ -271,18 +294,49 @@ export function calculatePayrollRun(id: string, db?: Database): PayrollRun {
       WHERE employee_id = ? AND (payroll_run_id = ? OR (payroll_run_id IS NULL))
     `).all(emp.id, id) as DeductionRow[];
 
+    let employeeDeductions = 0;
     for (const ded of deductions) {
       if (ded.pre_tax) {
         employeeGross -= ded.amount;
       } else {
         employeeDeductions += ded.amount;
       }
+      deductionDetails.push({ type: ded.deduction_type, amount: ded.amount, pre_tax: ded.pre_tax });
     }
+
+    const employeeNet = employeeGross - employeeDeductions;
+    employeeDetails.push({
+      employee_id: emp.id,
+      first_name: emp.first_name,
+      last_name: emp.last_name,
+      gross: employeeGross,
+      deductions: deductionDetails,
+      net: employeeNet,
+    });
 
     totalGross += employeeGross;
     totalDeductions += employeeDeductions;
-    totalNet += employeeGross - employeeDeductions;
+    totalNet += employeeNet;
   }
+
+  return { employeeDetails, totalGross, totalDeductions, totalNet };
+}
+
+export function calculatePayrollRun(id: string, db?: Database): PayrollRun {
+  const d = db || getDatabase();
+  const run = getPayrollRun(id, d);
+
+  if (!run) {
+    throw new PayrollRunNotFoundError(id);
+  }
+
+  const employees = d.query(`
+    SELECT * FROM employees
+    WHERE (project_id = ? OR (project_id IS NULL AND org_id = ?))
+    AND status = 'active'
+  `).all(run.project_id ?? null, run.org_id ?? null) as EmployeeRow[];
+
+  const { totalGross, totalDeductions, totalNet } = computePayrollDetails(id, run, employees, d);
 
   const now = new Date().toISOString();
   d.run(`
@@ -292,6 +346,34 @@ export function calculatePayrollRun(id: string, db?: Database): PayrollRun {
   `, [totalGross, totalDeductions, totalNet, employees.length, now, id]);
 
   return getPayrollRun(id, d)!;
+}
+
+export function calculatePayrollRunDryRun(id: string, db?: Database): PayrollCalculationResult {
+  const d = db || getDatabase();
+  const run = getPayrollRun(id, d);
+
+  if (!run) {
+    throw new PayrollRunNotFoundError(id);
+  }
+
+  const employees = d.query(`
+    SELECT * FROM employees
+    WHERE (project_id = ? OR (project_id IS NULL AND org_id = ?))
+    AND status = 'active'
+  `).all(run.project_id ?? null, run.org_id ?? null) as EmployeeRow[];
+
+  const { employeeDetails, totalGross, totalDeductions, totalNet } = computePayrollDetails(id, run, employees, d);
+
+  return {
+    payroll_run_id: id,
+    period_start: run.period_start,
+    period_end: run.period_end,
+    employees: employeeDetails,
+    total_gross: totalGross,
+    total_deductions: totalDeductions,
+    total_net: totalNet,
+    total_employees: employees.length,
+  };
 }
 
 // Helper types
@@ -316,7 +398,15 @@ interface DeductionRow {
   employee_id: string;
   payroll_run_id: string | null;
   amount: number;
+  deduction_type: string;
   pre_tax: number;
+}
+
+interface BonusRow {
+  id: string;
+  employee_id: string;
+  payroll_run_id: string | null;
+  amount: number;
 }
 
 import type { Database } from "bun:sqlite";
