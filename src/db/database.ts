@@ -205,6 +205,17 @@ CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(payment_status);
 
 CREATE INDEX IF NOT EXISTS idx_orgs_project ON orgs(project_id);
 
+CREATE INDEX IF NOT EXISTS idx_bonuses_employee ON bonuses(employee_id);
+CREATE INDEX IF NOT EXISTS idx_bonuses_run ON bonuses(payroll_run_id);
+CREATE INDEX IF NOT EXISTS idx_bonuses_type ON bonuses(bonus_type);
+
+CREATE INDEX IF NOT EXISTS idx_pto_balances_employee ON pto_balances(employee_id);
+CREATE INDEX IF NOT EXISTS idx_pto_balances_employee_year ON pto_balances(employee_id, year);
+
+CREATE INDEX IF NOT EXISTS idx_pto_requests_employee ON pto_requests(employee_id);
+CREATE INDEX IF NOT EXISTS idx_pto_requests_status ON pto_requests(status);
+CREATE INDEX IF NOT EXISTS idx_pto_requests_dates ON pto_requests(start_date, end_date);
+
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   agent_id TEXT,
@@ -234,6 +245,51 @@ CREATE TABLE IF NOT EXISTS task_lists (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(project_id, slug)
+);
+
+CREATE TABLE IF NOT EXISTS bonuses (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  payroll_run_id TEXT REFERENCES payroll_runs(id) ON DELETE SET NULL,
+  bonus_type TEXT NOT NULL CHECK(bonus_type IN ('performance', 'signing', 'retention', 'commission', 'holiday', 'spot', 'other')),
+  amount REAL NOT NULL,
+  currency TEXT DEFAULT 'USD',
+  taxable INTEGER NOT NULL DEFAULT 1,
+  reason TEXT,
+  effective_date TEXT NOT NULL,
+  period TEXT CHECK(period IN ('hourly', 'daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'annual', 'one-time')),
+  metadata TEXT DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pto_balances (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  pto_type TEXT NOT NULL CHECK(pto_type IN ('vacation', 'sick', 'personal', 'bereavement', 'parental', 'other')),
+  year INTEGER NOT NULL,
+  total_days REAL NOT NULL DEFAULT 0,
+  used_days REAL NOT NULL DEFAULT 0,
+  accrued_days REAL NOT NULL DEFAULT 0,
+  metadata TEXT DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(employee_id, pto_type, year)
+);
+
+CREATE TABLE IF NOT EXISTS pto_requests (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  pto_type TEXT NOT NULL CHECK(pto_type IN ('vacation', 'sick', 'personal', 'bereavement', 'parental', 'other')),
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  total_days REAL NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected', 'cancelled')),
+  reason TEXT,
+  approved_by TEXT,
+  approved_at TEXT,
+  metadata TEXT DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `;
 

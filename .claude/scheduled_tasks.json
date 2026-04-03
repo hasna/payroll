@@ -1,11 +1,10 @@
 {
   "tasks": [
     {
-      "id": "df7626f2",
+      "id": "f120e078",
       "cron": "* * * * *",
-      "prompt": "Continue working on open-payroll. Complete all remaining tasks:\n1. OPE37-00005: Dashboard - wire up data\n2. OPE37-00007: Documentation - README, CHANGELOG, AGENTS.md\n\nCheck progress, test CLI, commit when done.",
-      "createdAt": 1775206442790,
-      "lastFiredAt": 1775207047939,
+      "prompt": "Continue working on open-payroll. Execute tasks: OPE38-00001 through OPE38-00006 (bonus tracking, PTO tracking, agent auth, bulk ops, net payroll calc, config). Build features, write tests, verify, commit when done. Do NOT ask for permission - just build.",
+      "createdAt": 1775208084119,
       "recurring": true,
       "sessionId": "a0252ee1-137f-4650-a9a0-8a2febeccff9"
     }
