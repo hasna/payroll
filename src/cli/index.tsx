@@ -18,6 +18,7 @@ import {
   deletePayrollRun,
   calculatePayrollRun,
 } from "../db/payroll-runs.js";
+import { exportEmployeesCSV, exportPayrollRunsCSV, exportEmployeeReportCSV } from "../lib/csv.js";
 import type { Employee, EmployeeStatus, EmployeeFilter } from "../types/index.js";
 
 import { readFileSync } from "node:fs";
@@ -388,6 +389,29 @@ program
       ];
       console.log(parts.join("  "));
     }
+  });
+
+// export csv
+program
+  .command("export:employees")
+  .description("Export employees to CSV")
+  .action(() => {
+    console.log(exportEmployeesCSV());
+  });
+
+program
+  .command("export:payroll [startDate] [endDate]")
+  .description("Export payroll runs to CSV (optional start/end dates)")
+  .action((startDate?: string, endDate?: string) => {
+    console.log(exportPayrollRunsCSV(startDate, endDate));
+  });
+
+program
+  .command("export:employee <id>")
+  .description("Export full employee report (CSV with PTO, bonuses)")
+  .action((id: string) => {
+    const resolvedId = resolveEmployeeId(id);
+    console.log(exportEmployeeReportCSV(resolvedId));
   });
 
 // Default action
