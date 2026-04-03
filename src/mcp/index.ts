@@ -29,6 +29,8 @@ import { createBonus, getBonus, listBonuses, updateBonus, deleteBonus, getEmploy
 import { createPTOBalance, getEmployeePTOBalance, createPTORequest, listPTORequests, approvePTORequest, rejectPTORequest } from "../db/pto.js";
 import { getDatabase, resolvePartialId, generateId } from "../db/database.js";
 import type { Employee, PayrollRun } from "../types/index.js";
+import { createAuditLog, listAuditLogs } from "../lib/audit.js";
+import { createWebhook, listWebhooks, getWebhook, updateWebhook, deleteWebhook, triggerWebhooks, type WebhookEvent } from "../lib/webhooks.js";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -139,6 +141,14 @@ server.tool(
       project_id,
       org_id,
     });
+    createAuditLog({
+      entity_type: "employee",
+      entity_id: employee.id,
+      action: "create",
+      new_values: employee as unknown as Record<string, unknown>,
+      metadata: { source: "mcp" },
+    });
+    triggerWebhooks("employee.created", { employee }).catch(() => {});
     return { content: [{ type: "text", text: JSON.stringify(employee, null, 2) }] };
   }
 );
@@ -228,6 +238,7 @@ server.tool(
     version: z.number().describe("Current version for optimistic locking"),
   },
   async ({ id, first_name, last_name, email, department, position, base_salary, status, version }) => {
+    const oldEmp = getEmployee(id);
     const employee = updateEmployee(id, {
       first_name,
       last_name,
@@ -238,6 +249,15 @@ server.tool(
       status,
       version,
     });
+    createAuditLog({
+      entity_type: "employee",
+      entity_id: id,
+      action: "update",
+      old_values: oldEmp as unknown as Record<string, unknown>,
+      new_values: employee as unknown as Record<string, unknown>,
+      metadata: { source: "mcp" },
+    });
+    triggerWebhooks("employee.updated", { employee }).catch(() => {});
     return { content: [{ type: "text", text: JSON.stringify(employee, null, 2) }] };
   }
 );
@@ -249,7 +269,16 @@ server.tool(
     id: z.string().describe("Employee ID"),
   },
   async ({ id }) => {
+    const old = getEmployee(id);
     deleteEmployee(id);
+    createAuditLog({
+      entity_type: "employee",
+      entity_id: id,
+      action: "delete",
+      old_values: old as unknown as Record<string, unknown>,
+      metadata: { source: "mcp" },
+    });
+    triggerWebhooks("employee.deleted", { employee_id: id }).catch(() => {});
     return { content: [{ type: "text", text: JSON.stringify({ success: true, id }) }] };
   }
 );
@@ -304,6 +333,14 @@ server.tool(
   },
   async ({ period_start, period_end, project_id, org_id }) => {
     const run = createPayrollRun({ period_start, period_end, project_id, org_id });
+    createAuditLog({
+      entity_type: "payroll_run",
+      entity_id: run.id,
+      action: "create",
+      new_values: run as unknown as Record<string, unknown>,
+      metadata: { source: "mcp" },
+    });
+    triggerWebhooks("payroll_run.created", { payroll_run: run }).catch(() => {});
     return { content: [{ type: "text", text: JSON.stringify(run, null, 2) }] };
   }
 );
@@ -349,6 +386,13 @@ server.tool(
   },
   async ({ id }) => {
     const run = calculatePayrollRun(id);
+    createAuditLog({
+      entity_type: "payroll_run",
+      entity_id: id,
+      action: "calculate",
+      new_values: run as unknown as Record<string, unknown>,
+      metadata: { source: "mcp" },
+    });
     return { content: [{ type: "text", text: JSON.stringify(run, null, 2) }] };
   }
 );
@@ -363,7 +407,19 @@ server.tool(
     version: z.number().describe("Current version for optimistic locking"),
   },
   async ({ id, status, approved_by, version }) => {
+    const oldRun = getPayrollRun(id);
     const run = updatePayrollRun(id, { status, approved_by, approved_at: approved_by ? new Date().toISOString() : undefined, version });
+    createAuditLog({
+      entity_type: "payroll_run",
+      entity_id: id,
+      action: status === "approved" ? "approve" : status === "rejected" ? "reject" : "update",
+      old_values: oldRun as unknown as Record<string, unknown>,
+      new_values: run as unknown as Record<string, unknown>,
+      metadata: { source: "mcp", approved_by },
+    });
+    if (status === "approved") triggerWebhooks("payroll_run.approved", { payroll_run: run }).catch(() => {});
+    else if (status === "rejected") triggerWebhooks("payroll_run.rejected", { payroll_run: run }).catch(() => {});
+    else triggerWebhooks("payroll_run.updated", { payroll_run: run }).catch(() => {});
     return { content: [{ type: "text", text: JSON.stringify(run, null, 2) }] };
   }
 );
@@ -497,6 +553,14 @@ server.tool(
   },
   async ({ employee_id, pto_type, start_date, end_date, total_days, reason }) => {
     const request = createPTORequest({ employee_id, pto_type, start_date, end_date, total_days, reason });
+    createAuditLog({
+      entity_type: "pto_request",
+      entity_id: request.id,
+      action: "create",
+      new_values: request as unknown as Record<string, unknown>,
+      metadata: { source: "mcp" },
+    });
+    triggerWebhooks("pto_request.created", { pto_request: request }).catch(() => {});
     return { content: [{ type: "text", text: JSON.stringify(request, null, 2) }] };
   }
 );
@@ -525,6 +589,14 @@ server.tool(
   },
   async ({ id, approved_by }) => {
     const request = approvePTORequest(id, approved_by);
+    createAuditLog({
+      entity_type: "pto_request",
+      entity_id: id,
+      action: "approve",
+      new_values: request as unknown as Record<string, unknown>,
+      metadata: { source: "mcp", approved_by },
+    });
+    triggerWebhooks("pto_request.approved", { pto_request: request }).catch(() => {});
     return { content: [{ type: "text", text: JSON.stringify(request, null, 2) }] };
   }
 );
@@ -535,6 +607,14 @@ server.tool(
   { id: z.string().describe("PTO request ID") },
   async ({ id }) => {
     const request = rejectPTORequest(id);
+    createAuditLog({
+      entity_type: "pto_request",
+      entity_id: id,
+      action: "reject",
+      new_values: request as unknown as Record<string, unknown>,
+      metadata: { source: "mcp" },
+    });
+    triggerWebhooks("pto_request.rejected", { pto_request: request }).catch(() => {});
     return { content: [{ type: "text", text: JSON.stringify(request, null, 2) }] };
   }
 );
@@ -628,6 +708,109 @@ server.tool(
         net_pay: netPay,
       },
     }, null, 2) }] };
+  }
+);
+
+// === AUDIT LOG TOOLS ===
+
+server.tool(
+  "list_audit_logs",
+  "List audit logs with filters and pagination",
+  {
+    entity_type: z.string().optional().describe("Filter by entity type (employee, payroll_run, pto_request)"),
+    entity_id: z.string().optional().describe("Filter by entity ID"),
+    action: z.string().optional().describe("Filter by action (create, update, delete, approve, reject, calculate)"),
+    actor_name: z.string().optional().describe("Filter by actor name"),
+    start_date: z.string().optional().describe("Start date (YYYY-MM-DD)"),
+    end_date: z.string().optional().describe("End date (YYYY-MM-DD)"),
+    limit: z.number().min(1).max(100).optional().describe("Max results (default 50)"),
+    offset: z.number().min(0).optional().describe("Pagination offset"),
+  },
+  async ({ entity_type, entity_id, action, actor_name, start_date, end_date, limit, offset }) => {
+    const result = listAuditLogs({ entity_type, entity_id, action, actor_name, start_date, end_date, limit, offset });
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+// === WEBHOOK TOOLS ===
+
+server.tool(
+  "create_webhook",
+  "Register a webhook endpoint",
+  {
+    url: z.string().url().describe("Webhook URL"),
+    events: z.array(z.string()).describe("Events to subscribe to (e.g. employee.created, payroll_run.completed) or '*' for all"),
+    secret: z.string().optional().describe("Optional shared secret for signature verification"),
+    active: z.boolean().optional().describe("Whether webhook is active (default true)"),
+    metadata: z.record(z.unknown()).optional().describe("Additional metadata"),
+  },
+  async ({ url, events, secret, active, metadata }) => {
+    const webhook = createWebhook({ url, events, secret, active, metadata });
+    return { content: [{ type: "text", text: JSON.stringify(webhook, null, 2) }] };
+  }
+);
+
+server.tool(
+  "list_webhooks",
+  "List all webhooks",
+  { active_only: z.boolean().optional().describe("Filter to active webhooks only") },
+  async ({ active_only }) => {
+    const webhooks = listWebhooks(active_only ? { active: true } : undefined);
+    return { content: [{ type: "text", text: JSON.stringify(webhooks, null, 2) }] };
+  }
+);
+
+server.tool(
+  "get_webhook",
+  "Get a webhook by ID",
+  { id: z.string().describe("Webhook ID") },
+  async ({ id }) => {
+    const webhook = getWebhook(id);
+    if (!webhook) return { content: [{ type: "text", text: JSON.stringify({ error: "Webhook not found" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify(webhook, null, 2) }] };
+  }
+);
+
+server.tool(
+  "update_webhook",
+  "Update a webhook",
+  {
+    id: z.string().describe("Webhook ID"),
+    url: z.string().url().optional(),
+    events: z.array(z.string()).optional(),
+    secret: z.string().optional(),
+    active: z.boolean().optional(),
+    metadata: z.record(z.unknown()).optional(),
+  },
+  async ({ id, ...input }) => {
+    const webhook = updateWebhook(id, input);
+    if (!webhook) return { content: [{ type: "text", text: JSON.stringify({ error: "Webhook not found" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify(webhook, null, 2) }] };
+  }
+);
+
+server.tool(
+  "delete_webhook",
+  "Delete a webhook",
+  { id: z.string().describe("Webhook ID") },
+  async ({ id }) => {
+    const deleted = deleteWebhook(id);
+    return { content: [{ type: "text", text: JSON.stringify({ success: deleted, id }) }] };
+  }
+);
+
+server.tool(
+  "list_webhook_events",
+  "List available webhook events",
+  {},
+  async () => {
+    const events: WebhookEvent[] = [
+      "employee.created", "employee.updated", "employee.deleted",
+      "payroll_run.created", "payroll_run.updated", "payroll_run.completed",
+      "payroll_run.approved", "payroll_run.rejected",
+      "pto_request.created", "pto_request.approved", "pto_request.rejected",
+    ];
+    return { content: [{ type: "text", text: JSON.stringify({ events }, null, 2) }] };
   }
 );
 

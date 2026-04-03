@@ -291,6 +291,31 @@ CREATE TABLE IF NOT EXISTS pto_requests (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  action TEXT NOT NULL CHECK(action IN ('create', 'update', 'delete', 'approve', 'reject', 'calculate')),
+  actor_id TEXT,
+  actor_name TEXT,
+  old_values TEXT,
+  new_values TEXT,
+  metadata TEXT DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS webhooks (
+  id TEXT PRIMARY KEY,
+  url TEXT NOT NULL,
+  events TEXT NOT NULL,
+  secret TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  last_triggered_at TEXT,
+  metadata TEXT DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 let db: Database | null = null;
