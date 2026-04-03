@@ -55,6 +55,20 @@ const server = new McpServer({
   version: getMcpVersion(),
 });
 
+// === HELPERS ===
+
+function json(data: unknown) {
+  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+}
+
+function notFound(type: string, id: string) {
+  return json({ error: `${type} not found: ${id}` });
+}
+
+function success(data: unknown) {
+  return json({ success: true, ...(data as object) });
+}
+
 // === AGENT AUTH TOOLS ===
 
 server.tool(
@@ -74,7 +88,7 @@ server.tool(
         `INSERT INTO agents (id, name, description, metadata, created_at, last_seen_at) VALUES (?, ?, ?, '{}', ?, ?)`,
         [id, name, description || null, now, now]
       );
-      return { content: [{ type: "text", text: JSON.stringify({ success: true, id, name }, null, 2) }] };
+      return success({ id, name });
     } catch (e: unknown) {
       if (String(e).includes("UNIQUE constraint failed")) {
         return { content: [{ type: "text", text: JSON.stringify({ error: "Agent already exists", name }) }] };
@@ -97,7 +111,7 @@ server.tool(
     db.run(`UPDATE agents SET last_seen_at = ? WHERE name = ?`, [now, name]);
     const agent = db.query("SELECT * FROM agents WHERE name = ?").get(name);
 
-    return { content: [{ type: "text", text: JSON.stringify({ success: true, last_seen_at: now, agent }, null, 2) }] };
+    return success({ last_seen_at: now, agent });
   }
 );
 
@@ -108,7 +122,7 @@ server.tool(
   async () => {
     const db = getDatabase();
     const agents = db.query("SELECT * FROM agents ORDER BY last_seen_at DESC").all();
-    return { content: [{ type: "text", text: JSON.stringify(agents, null, 2) }] };
+    return json(agents);
   }
 );
 
@@ -156,7 +170,7 @@ server.tool(
       metadata: { source: "mcp" },
     });
     triggerWebhooks("employee.created", { employee }).catch(() => {});
-    return { content: [{ type: "text", text: JSON.stringify(employee, null, 2) }] };
+    return json(employee);
   }
 );
 
@@ -174,7 +188,7 @@ server.tool(
   },
   async (args) => {
     const employee = createEmployeeIfNotExists(args);
-    return { content: [{ type: "text", text: JSON.stringify(employee, null, 2) }] };
+    return json(employee);
   }
 );
 
@@ -193,7 +207,7 @@ server.tool(
   async (args) => {
     const { email, ...rest } = args;
     const employee = upsertEmployee(email, rest);
-    return { content: [{ type: "text", text: JSON.stringify(employee, null, 2) }] };
+    return json(employee);
   }
 );
 
@@ -206,9 +220,9 @@ server.tool(
   async ({ id }) => {
     const employee = getEmployee(id);
     if (!employee) {
-      return { content: [{ type: "text", text: JSON.stringify({ error: "Employee not found" }) }] };
+      return notFound("Employee", id);
     }
-    return { content: [{ type: "text", text: JSON.stringify(employee, null, 2) }] };
+    return json(employee);
   }
 );
 
@@ -226,7 +240,7 @@ server.tool(
   },
   async ({ project_id, org_id, status, department, search, limit, offset }) => {
     const result = listEmployeesWithPagination({ project_id, org_id, status, department, search, limit, offset });
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    return json(result);
   }
 );
 
@@ -265,7 +279,7 @@ server.tool(
       metadata: { source: "mcp" },
     });
     triggerWebhooks("employee.updated", { employee }).catch(() => {});
-    return { content: [{ type: "text", text: JSON.stringify(employee, null, 2) }] };
+    return json(employee);
   }
 );
 
@@ -311,7 +325,7 @@ server.tool(
   },
   async ({ query }) => {
     const employees = searchEmployees(query);
-    return { content: [{ type: "text", text: JSON.stringify(employees, null, 2) }] };
+    return json(employees);
   }
 );
 
@@ -323,7 +337,7 @@ server.tool(
   },
   async ({ ids }) => {
     const result = deleteEmployeesBulk(ids);
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    return json(result);
   }
 );
 
@@ -348,7 +362,7 @@ server.tool(
       metadata: { source: "mcp" },
     });
     triggerWebhooks("payroll_run.created", { payroll_run: run }).catch(() => {});
-    return { content: [{ type: "text", text: JSON.stringify(run, null, 2) }] };
+    return json(run);
   }
 );
 
@@ -361,9 +375,9 @@ server.tool(
   async ({ id }) => {
     const run = getPayrollRun(id);
     if (!run) {
-      return { content: [{ type: "text", text: JSON.stringify({ error: "Payroll run not found" }) }] };
+      return notFound("PayrollRun", id);
     }
-    return { content: [{ type: "text", text: JSON.stringify(run, null, 2) }] };
+    return json(run);
   }
 );
 
@@ -381,7 +395,7 @@ server.tool(
   },
   async ({ project_id, org_id, status, period_start, period_end, limit, offset }) => {
     const result = listPayrollRunsWithPagination({ project_id, org_id, status, period_start, period_end, limit, offset });
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    return json(result);
   }
 );
 
@@ -395,7 +409,7 @@ server.tool(
   async ({ id, dry_run }) => {
     if (dry_run) {
       const result = calculatePayrollRunDryRun(id);
-      return { content: [{ type: "text", text: JSON.stringify({ dry_run: true, ...result }, null, 2) }] };
+      return json({ dry_run: true, ...result });
     }
     const run = calculatePayrollRun(id);
     createAuditLog({
@@ -405,7 +419,7 @@ server.tool(
       new_values: run as unknown as Record<string, unknown>,
       metadata: { source: "mcp" },
     });
-    return { content: [{ type: "text", text: JSON.stringify(run, null, 2) }] };
+    return json(run);
   }
 );
 
@@ -432,7 +446,7 @@ server.tool(
     if (status === "approved") triggerWebhooks("payroll_run.approved", { payroll_run: run }).catch(() => {});
     else if (status === "rejected") triggerWebhooks("payroll_run.rejected", { payroll_run: run }).catch(() => {});
     else triggerWebhooks("payroll_run.updated", { payroll_run: run }).catch(() => {});
-    return { content: [{ type: "text", text: JSON.stringify(run, null, 2) }] };
+    return json(run);
   }
 );
 
@@ -465,7 +479,7 @@ server.tool(
   },
   async ({ employee_id, bonus_type, amount, currency, taxable, reason, effective_date, period }) => {
     const bonus = createBonus({ employee_id, bonus_type, amount, currency, taxable, reason, effective_date, period });
-    return { content: [{ type: "text", text: JSON.stringify(bonus, null, 2) }] };
+    return json(bonus);
   }
 );
 
@@ -475,7 +489,7 @@ server.tool(
   { id: z.string().describe("Bonus ID") },
   async ({ id }) => {
     const bonus = getBonus(id);
-    return { content: [{ type: "text", text: JSON.stringify(bonus, null, 2) }] };
+    return json(bonus);
   }
 );
 
@@ -489,7 +503,7 @@ server.tool(
   },
   async ({ employee_id, payroll_run_id, bonus_type }) => {
     const bonuses = listBonuses({ employee_id, payroll_run_id, bonus_type });
-    return { content: [{ type: "text", text: JSON.stringify(bonuses, null, 2) }] };
+    return json(bonuses);
   }
 );
 
@@ -506,7 +520,7 @@ server.tool(
   },
   async ({ id, ...input }) => {
     const bonus = updateBonus(id, input);
-    return { content: [{ type: "text", text: JSON.stringify(bonus, null, 2) }] };
+    return json(bonus);
   }
 );
 
@@ -534,7 +548,7 @@ server.tool(
   },
   async ({ employee_id, pto_type, year, total_days, accrued_days }) => {
     const balance = createPTOBalance({ employee_id, pto_type, year, total_days, accrued_days });
-    return { content: [{ type: "text", text: JSON.stringify(balance, null, 2) }] };
+    return json(balance);
   }
 );
 
@@ -548,7 +562,7 @@ server.tool(
   },
   async ({ employee_id, pto_type, year }) => {
     const balances = getEmployeePTOBalance(employee_id, pto_type, year);
-    return { content: [{ type: "text", text: JSON.stringify(balances, null, 2) }] };
+    return json(balances);
   }
 );
 
@@ -573,7 +587,7 @@ server.tool(
       metadata: { source: "mcp" },
     });
     triggerWebhooks("pto_request.created", { pto_request: request }).catch(() => {});
-    return { content: [{ type: "text", text: JSON.stringify(request, null, 2) }] };
+    return json(request);
   }
 );
 
@@ -588,7 +602,7 @@ server.tool(
   },
   async ({ employee_id, status, start_date, end_date }) => {
     const requests = listPTORequests({ employee_id, status, start_date, end_date });
-    return { content: [{ type: "text", text: JSON.stringify(requests, null, 2) }] };
+    return json(requests);
   }
 );
 
@@ -609,7 +623,7 @@ server.tool(
       metadata: { source: "mcp", approved_by },
     });
     triggerWebhooks("pto_request.approved", { pto_request: request }).catch(() => {});
-    return { content: [{ type: "text", text: JSON.stringify(request, null, 2) }] };
+    return json(request);
   }
 );
 
@@ -627,7 +641,7 @@ server.tool(
       metadata: { source: "mcp" },
     });
     triggerWebhooks("pto_request.rejected", { pto_request: request }).catch(() => {});
-    return { content: [{ type: "text", text: JSON.stringify(request, null, 2) }] };
+    return json(request);
   }
 );
 
@@ -644,7 +658,7 @@ server.tool(
   async ({ amount, from_currency, to_currency }) => {
     try {
       const result = convertCurrency(amount, from_currency, to_currency);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      return json(result);
     } catch (e) {
       return { content: [{ type: "text", text: JSON.stringify({ error: String(e) }) }] };
     }
@@ -657,7 +671,7 @@ server.tool(
   {},
   async () => {
     const currencies = listSupportedCurrencies();
-    return { content: [{ type: "text", text: JSON.stringify(currencies, null, 2) }] };
+    return json(currencies);
   }
 );
 
@@ -675,7 +689,7 @@ server.tool(
   async ({ payroll_run_id, company_name, company_identification, originating_dfi_identification }) => {
     try {
       const result = generateAchFromPayrollRun(payroll_run_id, company_name, company_identification, originating_dfi_identification);
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      return json(result);
     } catch (e) {
       return { content: [{ type: "text", text: JSON.stringify({ error: String(e) }) }] };
     }
@@ -695,7 +709,7 @@ server.tool(
     try {
       const pdfBytes = await generatePayslipForRun(payroll_run_id, employee_id);
       const base64 = Buffer.from(pdfBytes).toString("base64");
-      return { content: [{ type: "text", text: JSON.stringify({ success: true, payroll_run_id, employee_id, pdf_base64: base64, size_bytes: pdfBytes.length }, null, 2) }] };
+      return json({ success: true, payroll_run_id, employee_id, pdf_base64: base64, size_bytes: pdfBytes.length });
     } catch (e) {
       return { content: [{ type: "text", text: JSON.stringify({ error: String(e) }) }] };
     }
@@ -751,7 +765,7 @@ server.tool(
   },
   async ({ employee_id, period_start, period_end, fiscal_zone_id }) => {
     const emp = getEmployee(employee_id);
-    if (!emp) return { content: [{ type: "text", text: JSON.stringify({ error: "Employee not found" }) }] };
+    if (!emp) return notFound("Employee", employee_id);
 
     const baseSalary = emp.base_salary || 0;
     const monthlyRate = baseSalary / 12;
@@ -767,7 +781,7 @@ server.tool(
 
     if (fiscal_zone_id) {
       const zone = getFiscalZone(fiscal_zone_id);
-      if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "Fiscal zone not found" }) }] };
+      if (!zone) return notFound("FiscalZone", id);
       const tax = computeTax(totalGross, zone);
       return { content: [{ type: "text", text: JSON.stringify({
         employee: { id: emp.id, name: `${emp.first_name} ${emp.last_name}` },
@@ -832,7 +846,7 @@ server.tool(
   },
   async ({ entity_type, entity_id, action, actor_name, start_date, end_date, limit, offset }) => {
     const result = listAuditLogs({ entity_type, entity_id, action, actor_name, start_date, end_date, limit, offset });
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    return json(result);
   }
 );
 
@@ -850,7 +864,7 @@ server.tool(
   },
   async ({ name, country, currency, fiscal_year_start, metadata }) => {
     const org = createOrganization({ name, country, currency, fiscal_year_start, metadata });
-    return { content: [{ type: "text", text: JSON.stringify(org, null, 2) }] };
+    return json(org);
   }
 );
 
@@ -860,7 +874,7 @@ server.tool(
   {},
   async () => {
     const orgs = listOrganizations();
-    return { content: [{ type: "text", text: JSON.stringify(orgs, null, 2) }] };
+    return json(orgs);
   }
 );
 
@@ -871,7 +885,7 @@ server.tool(
   async ({ id }) => {
     const org = getOrganization(id);
     if (!org) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
-    return { content: [{ type: "text", text: JSON.stringify(org, null, 2) }] };
+    return json(org);
   }
 );
 
@@ -889,7 +903,7 @@ server.tool(
   async ({ id, ...input }) => {
     const org = updateOrganization(id, input);
     if (!org) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
-    return { content: [{ type: "text", text: JSON.stringify(org, null, 2) }] };
+    return json(org);
   }
 );
 
@@ -899,7 +913,7 @@ server.tool(
   { id: z.string().describe("Organization ID") },
   async ({ id }) => {
     const deleted = deleteOrganization(id);
-    return { content: [{ type: "text", text: JSON.stringify({ success: deleted, id }) }] };
+    return success({ deleted, id });
   }
 );
 
@@ -925,7 +939,7 @@ server.tool(
   },
   async ({ country, region, tax_year, brackets, social_security_rate, social_security_cap, medicare_rate, unemployment_rate, currency }) => {
     const zone = createFiscalZone({ country, region, tax_year, brackets, social_security_rate, social_security_cap, medicare_rate, unemployment_rate, currency });
-    return { content: [{ type: "text", text: JSON.stringify(zone, null, 2) }] };
+    return json(zone);
   }
 );
 
@@ -939,7 +953,7 @@ server.tool(
   },
   async ({ country, active_only, tax_year }) => {
     const zones = listFiscalZones({ country, active: active_only, tax_year });
-    return { content: [{ type: "text", text: JSON.stringify(zones, null, 2) }] };
+    return json(zones);
   }
 );
 
@@ -950,7 +964,7 @@ server.tool(
   async ({ id }) => {
     const zone = getFiscalZone(id);
     if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
-    return { content: [{ type: "text", text: JSON.stringify(zone, null, 2) }] };
+    return json(zone);
   }
 );
 
@@ -969,7 +983,7 @@ server.tool(
   async ({ id, ...input }) => {
     const zone = updateFiscalZone(id, input);
     if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
-    return { content: [{ type: "text", text: JSON.stringify(zone, null, 2) }] };
+    return json(zone);
   }
 );
 
@@ -979,7 +993,7 @@ server.tool(
   { id: z.string().describe("Fiscal zone ID") },
   async ({ id }) => {
     const deleted = deleteFiscalZone(id);
-    return { content: [{ type: "text", text: JSON.stringify({ success: deleted, id }) }] };
+    return success({ deleted, id });
   }
 );
 
@@ -994,7 +1008,7 @@ server.tool(
     const zone = getFiscalZone(fiscal_zone_id);
     if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "Fiscal zone not found" }) }] };
     const result = computeTax(gross, zone);
-    return { content: [{ type: "text", text: JSON.stringify({ zone: zone.country, tax_year: zone.tax_year, ...result }, null, 2) }] };
+    return json({ zone: zone.country, tax_year: zone.tax_year, ...result });
   }
 );
 
@@ -1008,7 +1022,7 @@ server.tool(
   async ({ country, tax_year }) => {
     const zone = getOrCreateDefaultZone(country, tax_year);
     if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "No default zone for country" }) }] };
-    return { content: [{ type: "text", text: JSON.stringify({ created: true, zone }, null, 2) }] };
+    return json({ created: true, zone });
   }
 );
 
@@ -1030,7 +1044,7 @@ server.tool(
   },
   async ({ name, frequency, project_id, org_id, day_of_month, day_of_week, period_start_offset, period_end_offset, auto_approve }) => {
     const schedule = createScheduledPayroll({ name, frequency, project_id, org_id, day_of_month, day_of_week, period_start_offset, period_end_offset, auto_approve });
-    return { content: [{ type: "text", text: JSON.stringify(schedule, null, 2) }] };
+    return json(schedule);
   }
 );
 
@@ -1044,7 +1058,7 @@ server.tool(
   },
   async ({ active_only, project_id, org_id }) => {
     const schedules = listScheduledPayrolls({ active: active_only, project_id, org_id });
-    return { content: [{ type: "text", text: JSON.stringify(schedules, null, 2) }] };
+    return json(schedules);
   }
 );
 
@@ -1055,7 +1069,7 @@ server.tool(
   async ({ id }) => {
     const schedule = getScheduledPayroll(id);
     if (!schedule) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
-    return { content: [{ type: "text", text: JSON.stringify(schedule, null, 2) }] };
+    return json(schedule);
   }
 );
 
@@ -1076,7 +1090,7 @@ server.tool(
   async ({ id, ...input }) => {
     const schedule = updateScheduledPayroll(id, input);
     if (!schedule) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
-    return { content: [{ type: "text", text: JSON.stringify(schedule, null, 2) }] };
+    return json(schedule);
   }
 );
 
@@ -1086,7 +1100,7 @@ server.tool(
   { id: z.string().describe("Schedule ID") },
   async ({ id }) => {
     const deleted = deleteScheduledPayroll(id);
-    return { content: [{ type: "text", text: JSON.stringify({ success: deleted, id }) }] };
+    return success({ deleted, id });
   }
 );
 
@@ -1096,7 +1110,7 @@ server.tool(
   {},
   async () => {
     const result = await runScheduledPayrolls();
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    return json(result);
   }
 );
 
@@ -1110,7 +1124,7 @@ server.tool(
   },
   async ({ frequency, day_of_month, day_of_week }) => {
     const next = computeNextRun(frequency, day_of_month ?? 1, day_of_week ?? 0);
-    return { content: [{ type: "text", text: JSON.stringify({ frequency, next_pay_date: next }, null, 2) }] };
+    return json({ frequency, next_pay_date: next });
   }
 );
 
@@ -1126,7 +1140,7 @@ server.tool(
   },
   async ({ url, events, secret, active, metadata }) => {
     const webhook = createWebhook({ url, events, secret, active, metadata });
-    return { content: [{ type: "text", text: JSON.stringify(webhook, null, 2) }] };
+    return json(webhook);
   }
 );
 
@@ -1136,7 +1150,7 @@ server.tool(
   { active_only: z.boolean().optional().describe("Filter to active webhooks only") },
   async ({ active_only }) => {
     const webhooks = listWebhooks(active_only ? { active: true } : undefined);
-    return { content: [{ type: "text", text: JSON.stringify(webhooks, null, 2) }] };
+    return json(webhooks);
   }
 );
 
@@ -1146,8 +1160,8 @@ server.tool(
   { id: z.string().describe("Webhook ID") },
   async ({ id }) => {
     const webhook = getWebhook(id);
-    if (!webhook) return { content: [{ type: "text", text: JSON.stringify({ error: "Webhook not found" }) }] };
-    return { content: [{ type: "text", text: JSON.stringify(webhook, null, 2) }] };
+    if (!webhook) return notFound("Webhook", id);
+    return json(webhook);
   }
 );
 
@@ -1164,8 +1178,8 @@ server.tool(
   },
   async ({ id, ...input }) => {
     const webhook = updateWebhook(id, input);
-    if (!webhook) return { content: [{ type: "text", text: JSON.stringify({ error: "Webhook not found" }) }] };
-    return { content: [{ type: "text", text: JSON.stringify(webhook, null, 2) }] };
+    if (!webhook) return notFound("Webhook", id);
+    return json(webhook);
   }
 );
 
@@ -1175,7 +1189,7 @@ server.tool(
   { id: z.string().describe("Webhook ID") },
   async ({ id }) => {
     const deleted = deleteWebhook(id);
-    return { content: [{ type: "text", text: JSON.stringify({ success: deleted, id }) }] };
+    return success({ deleted, id });
   }
 );
 
@@ -1190,7 +1204,7 @@ server.tool(
       "payroll_run.approved", "payroll_run.rejected",
       "pto_request.created", "pto_request.approved", "pto_request.rejected",
     ];
-    return { content: [{ type: "text", text: JSON.stringify({ events }, null, 2) }] };
+    return json({ events });
   }
 );
 
@@ -1216,7 +1230,7 @@ server.tool(
       const created = createEmployee(emp);
       results.push(created);
     }
-    return { content: [{ type: "text", text: JSON.stringify({ created: results.length, employees: results }, null, 2) }] };
+    return json({ created: results.length, employees: results });
   }
 );
 
@@ -1241,7 +1255,7 @@ server.tool(
       const updated = updateEmployee(id, data);
       results.push(updated);
     }
-    return { content: [{ type: "text", text: JSON.stringify({ updated: results.length, employees: results }, null, 2) }] };
+    return json({ updated: results.length, employees: results });
   }
 );
 
