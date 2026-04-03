@@ -9,6 +9,7 @@ import {
   getEmployee,
   getEmployeeByEmail,
   listEmployees,
+  listEmployeesWithPagination,
   updateEmployee,
   deleteEmployee,
   countEmployees,
@@ -19,6 +20,7 @@ import {
   createPayrollRun,
   getPayrollRun,
   listPayrollRuns,
+  listPayrollRunsWithPagination,
   updatePayrollRun,
   deletePayrollRun,
   calculatePayrollRun,
@@ -195,18 +197,19 @@ server.tool(
 
 server.tool(
   "list_employees",
-  "List employees with optional filters",
+  "List employees with optional filters and pagination",
   {
     project_id: z.string().optional().describe("Filter by project ID"),
     org_id: z.string().optional().describe("Filter by organization ID"),
     status: z.enum(["active", "inactive", "terminated"]).optional().describe("Filter by status"),
     department: z.string().optional().describe("Filter by department"),
     search: z.string().optional().describe("Search by name or email"),
-    limit: z.number().min(1).max(100).optional().describe("Max results"),
+    limit: z.number().min(1).max(100).optional().describe("Max results (default 50)"),
+    offset: z.number().min(0).optional().describe("Pagination offset (default 0)"),
   },
-  async ({ project_id, org_id, status, department, search, limit }) => {
-    const employees = listEmployees({ project_id, org_id, status, department, search, limit });
-    return { content: [{ type: "text", text: JSON.stringify(employees, null, 2) }] };
+  async ({ project_id, org_id, status, department, search, limit, offset }) => {
+    const result = listEmployeesWithPagination({ project_id, org_id, status, department, search, limit, offset });
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   }
 );
 
@@ -322,16 +325,19 @@ server.tool(
 
 server.tool(
   "list_payroll_runs",
-  "List payroll runs",
+  "List payroll runs with pagination",
   {
     project_id: z.string().optional().describe("Filter by project ID"),
     org_id: z.string().optional().describe("Filter by organization ID"),
     status: z.enum(["draft", "calculated", "approved", "processing", "completed", "cancelled"]).optional().describe("Filter by status"),
-    limit: z.number().min(1).max(100).optional().describe("Max results"),
+    period_start: z.string().optional().describe("Filter by period start"),
+    period_end: z.string().optional().describe("Filter by period end"),
+    limit: z.number().min(1).max(100).optional().describe("Max results (default 50)"),
+    offset: z.number().min(0).optional().describe("Pagination offset (default 0)"),
   },
-  async ({ project_id, org_id, status, limit }) => {
-    const runs = listPayrollRuns({ project_id, org_id, status, limit });
-    return { content: [{ type: "text", text: JSON.stringify(runs, null, 2) }] };
+  async ({ project_id, org_id, status, period_start, period_end, limit, offset }) => {
+    const result = listPayrollRunsWithPagination({ project_id, org_id, status, period_start, period_end, limit, offset });
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   }
 );
 

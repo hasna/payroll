@@ -94,45 +94,74 @@ export function getPayrollRun(id: string, db?: Database): PayrollRun | null {
 }
 
 export function listPayrollRuns(filter: PayrollRunFilter = {}, db?: Database): PayrollRun[] {
+  return listPayrollRunsWithPagination(filter, db).payrollRuns;
+}
+
+export interface PaginatedPayrollRuns {
+  payrollRuns: PayrollRun[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export function listPayrollRunsWithPagination(filter: PayrollRunFilter = {}, db?: Database): PaginatedPayrollRuns {
   const d = db || getDatabase();
+  const limit = filter.limit || 50;
+  const offset = filter.offset || 0;
 
   let query = "SELECT * FROM payroll_runs WHERE 1=1";
+  let countQuery = "SELECT COUNT(*) as total FROM payroll_runs WHERE 1=1";
   const params: unknown[] = [];
+  const countParams: unknown[] = [];
 
   if (filter.project_id) {
     query += " AND project_id = ?";
+    countQuery += " AND project_id = ?";
     params.push(filter.project_id);
+    countParams.push(filter.project_id);
   }
 
   if (filter.org_id) {
     query += " AND org_id = ?";
+    countQuery += " AND org_id = ?";
     params.push(filter.org_id);
+    countParams.push(filter.org_id);
   }
 
   if (filter.status) {
     query += " AND status = ?";
+    countQuery += " AND status = ?";
     params.push(filter.status);
+    countParams.push(filter.status);
   }
 
   if (filter.period_start) {
     query += " AND period_start >= ?";
+    countQuery += " AND period_start >= ?";
     params.push(filter.period_start);
+    countParams.push(filter.period_start);
   }
 
   if (filter.period_end) {
     query += " AND period_end <= ?";
+    countQuery += " AND period_end <= ?";
     params.push(filter.period_end);
+    countParams.push(filter.period_end);
   }
 
-  query += " ORDER BY run_date DESC";
+  const countResult = d.query(countQuery).get(...countParams) as { total: number };
+  const total = countResult.total;
 
-  if (filter.limit) {
-    query += " LIMIT ?";
-    params.push(filter.limit);
-  }
+  query += " ORDER BY run_date DESC LIMIT ? OFFSET ?";
+  params.push(limit, offset);
 
   const rows = d.query(query).all(...params) as PayrollRunRow[];
-  return rows.map(rowToPayrollRun);
+  return {
+    payrollRuns: rows.map(rowToPayrollRun),
+    total,
+    limit,
+    offset,
+  };
 }
 
 export function updatePayrollRun(id: string, input: UpdatePayrollRunInput, db?: Database): PayrollRun {

@@ -179,51 +179,82 @@ export function getEmployeeByEmail(email: string, db?: Database): Employee | nul
 }
 
 export function listEmployees(filter: EmployeeFilter = {}, db?: Database): Employee[] {
+  return listEmployeesWithPagination(filter, db).employees;
+}
+
+export interface PaginatedResult<T> {
+  employees: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListEmployeesOptions extends EmployeeFilter {
+  limit?: number;
+  offset?: number;
+}
+
+export function listEmployeesWithPagination(options: ListEmployeesOptions = {}, db?: Database): PaginatedResult<Employee> {
   const d = db || getDatabase();
+  const limit = options.limit || 50;
+  const offset = options.offset || 0;
 
   let query = "SELECT * FROM employees WHERE 1=1";
+  let countQuery = "SELECT COUNT(*) as total FROM employees WHERE 1=1";
   const params: unknown[] = [];
+  const countParams: unknown[] = [];
 
-  if (filter.project_id) {
+  if (options.project_id) {
     query += " AND project_id = ?";
-    params.push(filter.project_id);
+    countQuery += " AND project_id = ?";
+    params.push(options.project_id);
+    countParams.push(options.project_id);
   }
 
-  if (filter.org_id) {
+  if (options.org_id) {
     query += " AND org_id = ?";
-    params.push(filter.org_id);
+    countQuery += " AND org_id = ?";
+    params.push(options.org_id);
+    countParams.push(options.org_id);
   }
 
-  if (filter.status) {
-    if (Array.isArray(filter.status)) {
-      query += ` AND status IN (${filter.status.map(() => "?").join(",")})`;
-      params.push(...filter.status);
+  if (options.status) {
+    if (Array.isArray(options.status)) {
+      query += ` AND status IN (${options.status.map(() => "?").join(",")})`;
+      countQuery += ` AND status IN (${options.status.map(() => "?").join(",")})`;
+      params.push(...options.status);
+      countParams.push(...options.status);
     } else {
       query += " AND status = ?";
-      params.push(filter.status);
+      countQuery += " AND status = ?";
+      params.push(options.status);
+      countParams.push(options.status);
     }
   }
 
-  if (filter.department) {
+  if (options.department) {
     query += " AND department = ?";
-    params.push(filter.department);
+    countQuery += " AND department = ?";
+    params.push(options.department);
+    countParams.push(options.department);
   }
 
-  if (filter.search) {
-    query += " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR employee_number LIKE ?)";
-    const searchTerm = `%${filter.search}%`;
-    params.push(searchTerm, searchTerm, searchTerm, searchTerm);
-  }
+  // Get total count
+  const countResult = d.query(countQuery).get(...countParams) as { total: number };
+  const total = countResult.total;
 
-  query += " ORDER BY created_at DESC";
-
-  if (filter.limit) {
-    query += " LIMIT ?";
-    params.push(filter.limit);
-  }
+  // Add pagination
+  query += " ORDER BY first_name, last_name LIMIT ? OFFSET ?";
+  params.push(limit, offset);
 
   const rows = d.query(query).all(...params) as EmployeeRow[];
-  return rows.map(rowToEmployee);
+
+  return {
+    employees: rows.map(rowToEmployee),
+    total,
+    limit,
+    offset,
+  };
 }
 
 export function updateEmployee(id: string, input: UpdateEmployeeInput, db?: Database): Employee {
