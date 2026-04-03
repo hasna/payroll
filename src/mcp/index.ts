@@ -37,6 +37,7 @@ import { createOrganization, listOrganizations, getOrganization, updateOrganizat
 import { createFiscalZone, listFiscalZones, getFiscalZone, updateFiscalZone, deleteFiscalZone, computeTax, getOrCreateDefaultZone, type TaxBracket, type FiscalZone as FiscalZoneType } from "../lib/fiscal-zones.js";
 import { generatePayslip, generatePayslipForRun } from "../lib/payslips.js";
 import { generateAchFromPayrollRun } from "../lib/bank-export.js";
+import { convertCurrency, listSupportedCurrencies } from "../lib/currency.js";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -627,6 +628,36 @@ server.tool(
     });
     triggerWebhooks("pto_request.rejected", { pto_request: request }).catch(() => {});
     return { content: [{ type: "text", text: JSON.stringify(request, null, 2) }] };
+  }
+);
+
+// === CURRENCY TOOLS ===
+
+server.tool(
+  "convert_currency",
+  "Convert an amount from one currency to another",
+  {
+    amount: z.number().describe("Amount to convert"),
+    from_currency: z.string().describe("Source currency code (e.g. USD, EUR, RON)"),
+    to_currency: z.string().describe("Target currency code"),
+  },
+  async ({ amount, from_currency, to_currency }) => {
+    try {
+      const result = convertCurrency(amount, from_currency, to_currency);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    } catch (e) {
+      return { content: [{ type: "text", text: JSON.stringify({ error: String(e) }) }] };
+    }
+  }
+);
+
+server.tool(
+  "list_currencies",
+  "List all supported currencies with exchange rates",
+  {},
+  async () => {
+    const currencies = listSupportedCurrencies();
+    return { content: [{ type: "text", text: JSON.stringify(currencies, null, 2) }] };
   }
 );
 
