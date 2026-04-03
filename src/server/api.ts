@@ -3,6 +3,7 @@ import express from "express";
 import { listEmployees, createEmployee } from "../db/employees.js";
 import { listPayrollRuns } from "../db/payroll-runs.js";
 import { getDatabase } from "../db/database.js";
+import { rateLimitMiddleware } from "../lib/rate-limit.js";
 
 const app = express();
 const PORT = process.env.PORT || 3010;
@@ -19,6 +20,10 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Rate limiting: 100 requests per minute
+const limiter = rateLimitMiddleware({ windowMs: 60 * 1000, maxRequests: 100 });
+app.use(limiter);
 
 // Get all employees
 app.get("/api/employees", (req, res) => {
@@ -139,6 +144,15 @@ app.get("/api/health", (req, res) => {
   } catch (error) {
     res.status(503).json({ status: "unhealthy", error: String(error) });
   }
+});
+
+// Rate limit info
+app.get("/api/rate-limit", (req, res) => {
+  res.json({
+    window_ms: 60000,
+    max_requests: 100,
+    info: "Rate limit headers (X-RateLimit-*) are included in all responses",
+  });
 });
 
 app.listen(PORT, () => {
