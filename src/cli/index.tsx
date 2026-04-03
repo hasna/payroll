@@ -48,37 +48,24 @@ function handleError(e: unknown): never {
   process.exit(1);
 }
 
-function resolveEmployeeId(partialId: string): string {
+function resolveId(table: string, partialId: string): string {
   const db = getDatabase();
-  const id = resolvePartialId(db, "employees", partialId);
+  const id = resolvePartialId(db, table, partialId);
   if (!id) {
-    const similar = db.query("SELECT id FROM employees WHERE id LIKE ? LIMIT 3").all(`%${partialId}%`) as { id: string }[];
+    const similar = db.query(`SELECT id FROM ${table} WHERE id LIKE ? LIMIT 3`).all(`%${partialId}%`) as { id: string }[];
     if (similar.length > 0) {
-      console.error(chalk.red(`Could not resolve employee ID: ${partialId}`));
+      console.error(chalk.red(`Could not resolve ${table} ID: ${partialId}`));
       console.error(chalk.dim(`Did you mean: ${similar.map(s => s.id.slice(0, 8)).join(", ")}?`));
     } else {
-      console.error(chalk.red(`Could not resolve employee ID: ${partialId}`));
+      console.error(chalk.red(`Could not resolve ${table} ID: ${partialId}`));
     }
     process.exit(1);
   }
   return id;
 }
 
-function resolvePayrollRunId(partialId: string): string {
-  const db = getDatabase();
-  const id = resolvePartialId(db, "payroll_runs", partialId);
-  if (!id) {
-    const similar = db.query("SELECT id FROM payroll_runs WHERE id LIKE ? LIMIT 3").all(`%${partialId}%`) as { id: string }[];
-    if (similar.length > 0) {
-      console.error(chalk.red(`Could not resolve payroll run ID: ${partialId}`));
-      console.error(chalk.dim(`Did you mean: ${similar.map(s => s.id.slice(0, 8)).join(", ")}?`));
-    } else {
-      console.error(chalk.red(`Could not resolve payroll run ID: ${partialId}`));
-    }
-    process.exit(1);
-  }
-  return id;
-}
+const resolveEmployeeId = (id: string) => resolveId("employees", id);
+const resolvePayrollRunId = (id: string) => resolveId("payroll_runs", id);
 
 function output(data: unknown, jsonMode: boolean): void {
   if (jsonMode) {
