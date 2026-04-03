@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Employee {
   id: string;
@@ -26,6 +26,19 @@ function App() {
   const [activeTab, setActiveTab] = useState<"employees" | "payroll">("employees");
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [runs, setRuns] = useState<PayrollRun[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("http://localhost:3010/api/employees")
+      .then(res => res.json())
+      .then(data => setEmployees(data))
+      .catch(console.error);
+    fetch("http://localhost:3010/api/payroll-runs")
+      .then(res => res.json())
+      .then(data => setRuns(data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -71,7 +84,9 @@ function App() {
                     Add Employee
                   </button>
                 </div>
-                {employees.length === 0 ? (
+                {loading ? (
+                  <p className="text-gray-500 text-center py-8">Loading...</p>
+                ) : employees.length === 0 ? (
                   <p className="text-gray-500 text-center py-8">No employees yet</p>
                 ) : (
                   <table className="min-w-full divide-y divide-gray-200">
@@ -116,7 +131,9 @@ function App() {
                     New Payroll Run
                   </button>
                 </div>
-                {runs.length === 0 ? (
+                {loading ? (
+                  <p className="text-gray-500 text-center py-8">Loading...</p>
+                ) : runs.length === 0 ? (
                   <p className="text-gray-500 text-center py-8">No payroll runs yet</p>
                 ) : (
                   <table className="min-w-full divide-y divide-gray-200">
