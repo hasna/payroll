@@ -239,6 +239,14 @@ export function listEmployeesWithPagination(options: ListEmployeesOptions = {}, 
     countParams.push(options.department);
   }
 
+  if (options.search) {
+    const term = `%${options.search}%`;
+    query += ` AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR department LIKE ? OR position LIKE ?)`;
+    countQuery += ` AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR department LIKE ? OR position LIKE ?)`;
+    params.push(term, term, term, term, term);
+    countParams.push(term, term, term, term, term);
+  }
+
   // Get total count
   const countResult = d.query(countQuery).get(...countParams) as { total: number };
   const total = countResult.total;

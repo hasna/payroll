@@ -272,6 +272,16 @@ function computePayrollDetails(id: string, run: PayrollRun, employees: EmployeeR
     let employeeGross = 0;
     const deductionDetails: DeductionDetail[] = [];
 
+    // Add pro-rated base salary from employee's base_salary
+    if (emp.base_salary && emp.base_salary > 0) {
+      const periodStart = new Date(run.period_start);
+      const periodEnd = new Date(run.period_end);
+      const periodDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const annualDays = 365;
+      const proRatedSalary = (emp.base_salary * periodDays) / annualDays;
+      employeeGross += proRatedSalary;
+    }
+
     for (const comp of components) {
       if (comp.taxable) {
         employeeGross += comp.amount;
@@ -330,11 +340,25 @@ export function calculatePayrollRun(id: string, db?: Database): PayrollRun {
     throw new PayrollRunNotFoundError(id);
   }
 
-  const employees = d.query(`
-    SELECT * FROM employees
-    WHERE (project_id = ? OR (project_id IS NULL AND org_id = ?))
-    AND status = 'active'
-  `).all(run.project_id ?? null, run.org_id ?? null) as EmployeeRow[];
+  // Build query that handles NULL project_id correctly (SQL NULL = NULL is always false)
+  const params: unknown[] = [];
+  let empQuery = "SELECT * FROM employees WHERE status = 'active'";
+
+  if (run.project_id !== null && run.project_id !== undefined) {
+    empQuery += " AND project_id = ?";
+    params.push(run.project_id);
+  } else {
+    empQuery += " AND project_id IS NULL";
+  }
+
+  if (run.org_id !== null && run.org_id !== undefined) {
+    empQuery += " AND org_id = ?";
+    params.push(run.org_id);
+  } else {
+    empQuery += " AND org_id IS NULL";
+  }
+
+  const employees = d.query(empQuery).all(...params) as EmployeeRow[];
 
   const { totalGross, totalDeductions, totalNet } = computePayrollDetails(id, run, employees, d);
 
@@ -356,11 +380,25 @@ export function calculatePayrollRunDryRun(id: string, db?: Database): PayrollCal
     throw new PayrollRunNotFoundError(id);
   }
 
-  const employees = d.query(`
-    SELECT * FROM employees
-    WHERE (project_id = ? OR (project_id IS NULL AND org_id = ?))
-    AND status = 'active'
-  `).all(run.project_id ?? null, run.org_id ?? null) as EmployeeRow[];
+  // Build query that handles NULL project_id correctly (SQL NULL = NULL is always false)
+  const params: unknown[] = [];
+  let empQuery = "SELECT * FROM employees WHERE status = 'active'";
+
+  if (run.project_id !== null && run.project_id !== undefined) {
+    empQuery += " AND project_id = ?";
+    params.push(run.project_id);
+  } else {
+    empQuery += " AND project_id IS NULL";
+  }
+
+  if (run.org_id !== null && run.org_id !== undefined) {
+    empQuery += " AND org_id = ?";
+    params.push(run.org_id);
+  } else {
+    empQuery += " AND org_id IS NULL";
+  }
+
+  const employees = d.query(empQuery).all(...params) as EmployeeRow[];
 
   const { employeeDetails, totalGross, totalDeductions, totalNet } = computePayrollDetails(id, run, employees, d);
 
