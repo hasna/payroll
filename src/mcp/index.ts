@@ -35,6 +35,7 @@ import { createWebhook, listWebhooks, getWebhook, updateWebhook, deleteWebhook, 
 import { createScheduledPayroll, listScheduledPayrolls, getScheduledPayroll, updateScheduledPayroll, deleteScheduledPayroll, runScheduledPayrolls, computeNextRun } from "../lib/scheduler.js";
 import { createOrganization, listOrganizations, getOrganization, updateOrganization, deleteOrganization } from "../lib/organizations.js";
 import { createFiscalZone, listFiscalZones, getFiscalZone, updateFiscalZone, deleteFiscalZone, computeTax, getOrCreateDefaultZone, type TaxBracket, type FiscalZone as FiscalZoneType } from "../lib/fiscal-zones.js";
+import { generatePayslip, generatePayslipForRun } from "../lib/payslips.js";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -629,6 +630,24 @@ server.tool(
 );
 
 // === SUMMARY TOOLS ===
+
+server.tool(
+  "generate_payslip",
+  "Generate a PDF payslip for an employee in a payroll run",
+  {
+    payroll_run_id: z.string().describe("Payroll run ID"),
+    employee_id: z.string().describe("Employee ID"),
+  },
+  async ({ payroll_run_id, employee_id }) => {
+    try {
+      const pdfBytes = await generatePayslipForRun(payroll_run_id, employee_id);
+      const base64 = Buffer.from(pdfBytes).toString("base64");
+      return { content: [{ type: "text", text: JSON.stringify({ success: true, payroll_run_id, employee_id, pdf_base64: base64, size_bytes: pdfBytes.length }, null, 2) }] };
+    } catch (e) {
+      return { content: [{ type: "text", text: JSON.stringify({ error: String(e) }) }] };
+    }
+  }
+);
 
 server.tool(
   "get_payroll_summary",
