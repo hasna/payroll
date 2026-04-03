@@ -263,7 +263,7 @@ function computePayrollDetails(id: string, run: PayrollRun, employees: EmployeeR
   let totalNet = 0;
 
   for (const emp of employees) {
-    // Get salary components
+    // Get salary components for this run (including recurring ones with no specific run)
     const components = d.query(`
       SELECT * FROM salary_components
       WHERE employee_id = ? AND (payroll_run_id = ? OR (payroll_run_id IS NULL AND recurring = 1))
@@ -272,20 +272,20 @@ function computePayrollDetails(id: string, run: PayrollRun, employees: EmployeeR
     let employeeGross = 0;
     const deductionDetails: DeductionDetail[] = [];
 
-    // Add pro-rated base salary from employee's base_salary
-    if (emp.base_salary && emp.base_salary > 0) {
+    // If salary components exist for this period, use them;
+    // otherwise fall back to pro-rated base_salary
+    if (components.length > 0) {
+      for (const comp of components) {
+        if (comp.taxable) {
+          employeeGross += comp.amount;
+        }
+      }
+    } else if (emp.base_salary && emp.base_salary > 0) {
+      // Pro-rate base salary by the number of days in the period
       const periodStart = new Date(run.period_start);
       const periodEnd = new Date(run.period_end);
       const periodDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-      const annualDays = 365;
-      const proRatedSalary = (emp.base_salary * periodDays) / annualDays;
-      employeeGross += proRatedSalary;
-    }
-
-    for (const comp of components) {
-      if (comp.taxable) {
-        employeeGross += comp.amount;
-      }
+      employeeGross += (emp.base_salary * periodDays) / 365;
     }
 
     // Get bonuses
