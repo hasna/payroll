@@ -33,6 +33,7 @@ import type { Employee, PayrollRun } from "../types/index.js";
 import { createAuditLog, listAuditLogs } from "../lib/audit.js";
 import { createWebhook, listWebhooks, getWebhook, updateWebhook, deleteWebhook, triggerWebhooks, type WebhookEvent } from "../lib/webhooks.js";
 import { createScheduledPayroll, listScheduledPayrolls, getScheduledPayroll, updateScheduledPayroll, deleteScheduledPayroll, runScheduledPayrolls, computeNextRun } from "../lib/scheduler.js";
+import { createOrganization, listOrganizations, getOrganization, updateOrganization, deleteOrganization } from "../lib/organizations.js";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -736,6 +737,73 @@ server.tool(
   async ({ entity_type, entity_id, action, actor_name, start_date, end_date, limit, offset }) => {
     const result = listAuditLogs({ entity_type, entity_id, action, actor_name, start_date, end_date, limit, offset });
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+// === ORGANIZATION TOOLS ===
+
+server.tool(
+  "create_organization",
+  "Create an organization",
+  {
+    name: z.string().describe("Organization name"),
+    country: z.string().optional().describe("Country code (e.g. US, RO)"),
+    currency: z.string().optional().describe("Default currency (default USD)"),
+    fiscal_year_start: z.number().min(1).max(12).optional().describe("Fiscal year start month (1-12, default 1)"),
+    metadata: z.record(z.unknown()).optional(),
+  },
+  async ({ name, country, currency, fiscal_year_start, metadata }) => {
+    const org = createOrganization({ name, country, currency, fiscal_year_start, metadata });
+    return { content: [{ type: "text", text: JSON.stringify(org, null, 2) }] };
+  }
+);
+
+server.tool(
+  "list_organizations",
+  "List all organizations",
+  {},
+  async () => {
+    const orgs = listOrganizations();
+    return { content: [{ type: "text", text: JSON.stringify(orgs, null, 2) }] };
+  }
+);
+
+server.tool(
+  "get_organization",
+  "Get an organization by ID",
+  { id: z.string().describe("Organization ID") },
+  async ({ id }) => {
+    const org = getOrganization(id);
+    if (!org) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify(org, null, 2) }] };
+  }
+);
+
+server.tool(
+  "update_organization",
+  "Update an organization",
+  {
+    id: z.string().describe("Organization ID"),
+    name: z.string().optional(),
+    country: z.string().optional(),
+    currency: z.string().optional(),
+    fiscal_year_start: z.number().min(1).max(12).optional(),
+    metadata: z.record(z.unknown()).optional(),
+  },
+  async ({ id, ...input }) => {
+    const org = updateOrganization(id, input);
+    if (!org) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify(org, null, 2) }] };
+  }
+);
+
+server.tool(
+  "delete_organization",
+  "Delete an organization",
+  { id: z.string().describe("Organization ID") },
+  async ({ id }) => {
+    const deleted = deleteOrganization(id);
+    return { content: [{ type: "text", text: JSON.stringify({ success: deleted, id }) }] };
   }
 );
 
