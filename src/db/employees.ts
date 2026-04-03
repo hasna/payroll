@@ -423,6 +423,17 @@ export function countEmployees(filter: EmployeeFilter = {}, db?: Database): numb
     }
   }
 
+  if (filter.department) {
+    query += " AND department = ?";
+    params.push(filter.department);
+  }
+
+  if (filter.search) {
+    const term = `%${filter.search}%`;
+    query += ` AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR department LIKE ? OR position LIKE ?)`;
+    params.push(term, term, term, term, term);
+  }
+
   const result = d.query(query).get(...params) as { count: number };
   return result.count;
 }
