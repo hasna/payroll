@@ -346,6 +346,24 @@ CREATE TABLE IF NOT EXISTS scheduled_payrolls (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS fiscal_zones (
+  id TEXT PRIMARY KEY,
+  country TEXT NOT NULL,
+  region TEXT,
+  tax_year INTEGER NOT NULL,
+  brackets TEXT NOT NULL,
+  social_security_rate REAL DEFAULT 0,
+  social_security_cap REAL,
+  medicare_rate REAL DEFAULT 0,
+  unemployment_rate REAL DEFAULT 0,
+  currency TEXT NOT NULL DEFAULT 'USD',
+  active INTEGER NOT NULL DEFAULT 1,
+  metadata TEXT DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(country, region, tax_year)
+);
 `;
 
 let db: Database | null = null;

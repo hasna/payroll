@@ -34,6 +34,7 @@ import { createAuditLog, listAuditLogs } from "../lib/audit.js";
 import { createWebhook, listWebhooks, getWebhook, updateWebhook, deleteWebhook, triggerWebhooks, type WebhookEvent } from "../lib/webhooks.js";
 import { createScheduledPayroll, listScheduledPayrolls, getScheduledPayroll, updateScheduledPayroll, deleteScheduledPayroll, runScheduledPayrolls, computeNextRun } from "../lib/scheduler.js";
 import { createOrganization, listOrganizations, getOrganization, updateOrganization, deleteOrganization } from "../lib/organizations.js";
+import { createFiscalZone, listFiscalZones, getFiscalZone, updateFiscalZone, deleteFiscalZone, computeTax, getOrCreateDefaultZone, type TaxBracket, type FiscalZone as FiscalZoneType } from "../lib/fiscal-zones.js";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -674,17 +675,16 @@ server.tool(
     employee_id: z.string().describe("Employee ID"),
     period_start: z.string().describe("Period start (YYYY-MM-DD)"),
     period_end: z.string().describe("Period end (YYYY-MM-DD)"),
+    fiscal_zone_id: z.string().optional().describe("Fiscal zone ID for tax calculation"),
   },
-  async ({ employee_id, period_start, period_end }) => {
+  async ({ employee_id, period_start, period_end, fiscal_zone_id }) => {
     const emp = getEmployee(employee_id);
     if (!emp) return { content: [{ type: "text", text: JSON.stringify({ error: "Employee not found" }) }] };
 
-    // Calculate base salary for period
     const baseSalary = emp.base_salary || 0;
     const monthlyRate = baseSalary / 12;
     const periodGross = monthlyRate;
 
-    // Get bonuses for period
     const bonuses = listBonuses({ employee_id });
     const periodBonuses = bonuses.filter(b =>
       b.effective_date >= period_start && b.effective_date <= period_end
@@ -693,7 +693,31 @@ server.tool(
 
     const totalGross = periodGross + bonusTotal;
 
-    // Simple tax calculation (25% flat for demo - should use fiscal zone rules)
+    if (fiscal_zone_id) {
+      const zone = getFiscalZone(fiscal_zone_id);
+      if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "Fiscal zone not found" }) }] };
+      const tax = computeTax(totalGross, zone);
+      return { content: [{ type: "text", text: JSON.stringify({
+        employee: { id: emp.id, name: `${emp.first_name} ${emp.last_name}` },
+        period: { start: period_start, end: period_end },
+        fiscal_zone: { id: zone.id, country: zone.country, tax_year: zone.tax_year },
+        breakdown: {
+          base_salary: periodGross,
+          bonuses: bonusTotal,
+          total_gross: tax.gross,
+          deductions: {
+            federal_tax: tax.federal_tax,
+            social_security: tax.social_security,
+            medicare: tax.medicare,
+            unemployment: tax.unemployment,
+            total: tax.total_deductions,
+          },
+          net_pay: tax.net,
+        },
+      }, null, 2) }] };
+    }
+
+    // Fallback to default calculation
     const federalTax = totalGross * 0.25;
     const socialSecurity = totalGross * 0.062;
     const medicare = totalGross * 0.0145;
@@ -804,6 +828,115 @@ server.tool(
   async ({ id }) => {
     const deleted = deleteOrganization(id);
     return { content: [{ type: "text", text: JSON.stringify({ success: deleted, id }) }] };
+  }
+);
+
+// === FISCAL ZONE TOOLS ===
+
+server.tool(
+  "create_fiscal_zone",
+  "Create a fiscal zone with tax brackets",
+  {
+    country: z.string().describe("Country code (e.g. US, RO)"),
+    region: z.string().optional().describe("Region/state code"),
+    tax_year: z.number().describe("Tax year"),
+    brackets: z.array(z.object({
+      min: z.number().describe("Minimum income"),
+      max: z.number().nullable().describe("Maximum income (null for unlimited)"),
+      rate: z.number().describe("Tax rate (e.g. 0.22 for 22%)"),
+    })).describe("Tax brackets"),
+    social_security_rate: z.number().optional().describe("Social security rate (default 0)"),
+    social_security_cap: z.number().optional().describe("Social security annual cap"),
+    medicare_rate: z.number().optional().describe("Medicare rate (default 0)"),
+    unemployment_rate: z.number().optional().describe("Unemployment rate (default 0)"),
+    currency: z.string().optional().describe("Currency code (default USD)"),
+  },
+  async ({ country, region, tax_year, brackets, social_security_rate, social_security_cap, medicare_rate, unemployment_rate, currency }) => {
+    const zone = createFiscalZone({ country, region, tax_year, brackets, social_security_rate, social_security_cap, medicare_rate, unemployment_rate, currency });
+    return { content: [{ type: "text", text: JSON.stringify(zone, null, 2) }] };
+  }
+);
+
+server.tool(
+  "list_fiscal_zones",
+  "List fiscal zones",
+  {
+    country: z.string().optional().describe("Filter by country"),
+    active_only: z.boolean().optional().describe("Filter to active only"),
+    tax_year: z.number().optional().describe("Tax year"),
+  },
+  async ({ country, active_only, tax_year }) => {
+    const zones = listFiscalZones({ country, active: active_only, tax_year });
+    return { content: [{ type: "text", text: JSON.stringify(zones, null, 2) }] };
+  }
+);
+
+server.tool(
+  "get_fiscal_zone",
+  "Get a fiscal zone by ID",
+  { id: z.string().describe("Fiscal zone ID") },
+  async ({ id }) => {
+    const zone = getFiscalZone(id);
+    if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify(zone, null, 2) }] };
+  }
+);
+
+server.tool(
+  "update_fiscal_zone",
+  "Update a fiscal zone",
+  {
+    id: z.string().describe("Fiscal zone ID"),
+    brackets: z.array(z.object({ min: z.number(), max: z.number().nullable(), rate: z.number() })).optional(),
+    social_security_rate: z.number().optional(),
+    social_security_cap: z.number().optional(),
+    medicare_rate: z.number().optional(),
+    unemployment_rate: z.number().optional(),
+    active: z.boolean().optional(),
+  },
+  async ({ id, ...input }) => {
+    const zone = updateFiscalZone(id, input);
+    if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify(zone, null, 2) }] };
+  }
+);
+
+server.tool(
+  "delete_fiscal_zone",
+  "Delete a fiscal zone",
+  { id: z.string().describe("Fiscal zone ID") },
+  async ({ id }) => {
+    const deleted = deleteFiscalZone(id);
+    return { content: [{ type: "text", text: JSON.stringify({ success: deleted, id }) }] };
+  }
+);
+
+server.tool(
+  "compute_tax",
+  "Compute taxes for a gross amount using a fiscal zone",
+  {
+    gross: z.number().describe("Gross income amount"),
+    fiscal_zone_id: z.string().describe("Fiscal zone ID to use"),
+  },
+  async ({ gross, fiscal_zone_id }) => {
+    const zone = getFiscalZone(fiscal_zone_id);
+    if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "Fiscal zone not found" }) }] };
+    const result = computeTax(gross, zone);
+    return { content: [{ type: "text", text: JSON.stringify({ zone: zone.country, tax_year: zone.tax_year, ...result }, null, 2) }] };
+  }
+);
+
+server.tool(
+  "get_or_create_default_zone",
+  "Get or create default fiscal zone for a country (US, RO)",
+  {
+    country: z.string().describe("Country code (US or RO)"),
+    tax_year: z.number().describe("Tax year"),
+  },
+  async ({ country, tax_year }) => {
+    const zone = getOrCreateDefaultZone(country, tax_year);
+    if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "No default zone for country" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify({ created: true, zone }, null, 2) }] };
   }
 );
 
