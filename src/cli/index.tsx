@@ -67,12 +67,6 @@ function resolveId(table: string, partialId: string): string {
 const resolveEmployeeId = (id: string) => resolveId("employees", id);
 const resolvePayrollRunId = (id: string) => resolveId("payroll_runs", id);
 
-function output(data: unknown, jsonMode: boolean): void {
-  if (jsonMode) {
-    console.log(JSON.stringify(data, null, 2));
-  }
-}
-
 const statusColors: Record<string, (s: string) => string> = {
   active: chalk.green,
   inactive: chalk.yellow,
@@ -139,7 +133,7 @@ program
       });
 
       if (globalOpts.json) {
-        output(employee, true);
+        console.log(JSON.stringify(employee, null, 2));
       } else {
         console.log(chalk.green("Employee created:"));
         console.log(formatEmployeeLine(employee));
@@ -174,7 +168,7 @@ program
       const employees = listEmployees(filter);
 
       if (globalOpts.json) {
-        output(employees, true);
+        console.log(JSON.stringify(employees, null, 2));
       } else {
         console.log(chalk.bold(`\nEmployees (${employees.length}):\n`));
         for (const emp of employees) {
@@ -202,7 +196,7 @@ program
       }
 
       if (globalOpts.json) {
-        output(employee, true);
+        console.log(JSON.stringify(employee, null, 2));
         return;
       }
 
@@ -259,7 +253,7 @@ program
       });
 
       if (globalOpts.json) {
-        output(employee, true);
+        console.log(JSON.stringify(employee, null, 2));
       } else {
         console.log(chalk.green("Employee updated:"));
         console.log(formatEmployeeLine(employee));
@@ -303,7 +297,7 @@ program
         });
 
         if (globalOpts.json) {
-          output(run, true);
+          console.log(JSON.stringify(run, null, 2));
         } else {
           console.log(chalk.green("Payroll run created:"));
           console.log(`  ${chalk.dim("ID:")}     ${run.id}`);
@@ -317,7 +311,7 @@ program
         });
 
         if (globalOpts.json) {
-          output(runs, true);
+          console.log(JSON.stringify(runs, null, 2));
         } else {
           console.log(chalk.bold(`\nPayroll Runs (${runs.length}):\n`));
           for (const run of runs) {
@@ -342,7 +336,7 @@ program
       const run = calculatePayrollRun(resolvedId);
 
       if (globalOpts.json) {
-        output(run, true);
+        console.log(JSON.stringify(run, null, 2));
       } else {
         console.log(chalk.green("Payroll calculated:"));
         console.log(`  ${chalk.dim("Total Gross:")}    $${run.total_gross.toLocaleString()}`);
@@ -366,7 +360,7 @@ program
     for (const e of all) counts[e.status] = (counts[e.status] || 0) + 1;
 
     if (globalOpts.json) {
-      output(counts, true);
+      console.log(JSON.stringify(counts, null, 2));
     } else {
       const parts = [
         `total: ${chalk.bold(String(counts.total))}`,
