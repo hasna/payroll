@@ -314,9 +314,11 @@ server.tool(
   {
     project_id: z.string().optional().describe("Filter by project ID"),
     status: z.enum(["active", "inactive", "terminated"]).optional().describe("Filter by status"),
+    department: z.string().optional().describe("Filter by department"),
+    search: z.string().optional().describe("Search in name, email, department, position"),
   },
-  async ({ project_id, status }) => {
-    const count = countEmployees({ project_id, status });
+  async ({ project_id, status, department, search }) => {
+    const count = countEmployees({ project_id, status, department, search });
     return json({ count });
   }
 );

@@ -5,7 +5,7 @@
       "cron": "* * * * *",
       "prompt": "Improve the open-payroll codebase at /Users/hasna/Workspace/hasna/opensource/open-payroll. Each run should do ONE concrete, impactful improvement (fix a bug, simplify code, improve performance, add tests, refactor, etc). Focus areas:\n1. Simplify bloated code - merge redundant functions, remove dead code, consolidate similar logic\n2. Fix any remaining security issues\n3. Improve code quality (type safety, error handling, consistency)\n4. Fix any CLI commands that aren't working\n5. Improve the MCP server tools\n6. Add missing quality-of-life features\n\nAfter each run, commit with message: \"Iterative improvement pass N/12\" and push.\n\nRun exactly 12 times then stop. Do not stop early.",
       "createdAt": 1775211926034,
-      "lastFiredAt": 1775213619885,
+      "lastFiredAt": 1775213680434,
       "recurring": true,
       "sessionId": "a0252ee1-137f-4650-a9a0-8a2febeccff9"
     }
