@@ -36,6 +36,7 @@ import { createScheduledPayroll, listScheduledPayrolls, getScheduledPayroll, upd
 import { createOrganization, listOrganizations, getOrganization, updateOrganization, deleteOrganization } from "../lib/organizations.js";
 import { createFiscalZone, listFiscalZones, getFiscalZone, updateFiscalZone, deleteFiscalZone, computeTax, getOrCreateDefaultZone, type TaxBracket, type FiscalZone as FiscalZoneType } from "../lib/fiscal-zones.js";
 import { generatePayslip, generatePayslipForRun } from "../lib/payslips.js";
+import { generateAchFromPayrollRun } from "../lib/bank-export.js";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -626,6 +627,27 @@ server.tool(
     });
     triggerWebhooks("pto_request.rejected", { pto_request: request }).catch(() => {});
     return { content: [{ type: "text", text: JSON.stringify(request, null, 2) }] };
+  }
+);
+
+// === BANK FILE EXPORT ===
+
+server.tool(
+  "export_ach_file",
+  "Generate NACHA ACH file for bank transfers from a payroll run",
+  {
+    payroll_run_id: z.string().describe("Payroll run ID"),
+    company_name: z.string().describe("Company name for the ACH file header"),
+    company_identification: z.string().describe("Company identification number"),
+    originating_dfi_identification: z.string().describe("Originating DFI routing number (9 digits)"),
+  },
+  async ({ payroll_run_id, company_name, company_identification, originating_dfi_identification }) => {
+    try {
+      const result = generateAchFromPayrollRun(payroll_run_id, company_name, company_identification, originating_dfi_identification);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    } catch (e) {
+      return { content: [{ type: "text", text: JSON.stringify({ error: String(e) }) }] };
+    }
   }
 );
 
