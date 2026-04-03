@@ -399,6 +399,7 @@ export function resolvePartialId(db: Database, table: string, partialId: string)
 
 export function generateId(prefix: string = ""): string {
   const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).slice(2, 10);
+  // Use crypto.randomUUID for secure random IDs
+  const random = globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 8);
   return prefix ? `${prefix}_${timestamp}${random}` : `${timestamp}${random}`;
 }

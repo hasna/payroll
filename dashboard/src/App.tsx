@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3010";
+
 interface PortalData {
   employee: { id: string; first_name: string; last_name: string; email: string; department: string; position: string; base_salary: number; currency: string };
   ptoBalances: Array<{ pto_type: string; total_days: number; used_days: number; accrued_days: number }>;
@@ -46,11 +48,11 @@ function App() {
   const [portalLoading, setPortalLoading] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:3010/api/employees")
+    fetch(`${API_URL}/api/employees`)
       .then(res => res.json())
       .then(data => setEmployees(data))
       .catch(console.error);
-    fetch("http://localhost:3010/api/payroll-runs")
+    fetch(`${API_URL}/api/payroll-runs`)
       .then(res => res.json())
       .then(data => setRuns(data))
       .catch(console.error)
@@ -59,7 +61,7 @@ function App() {
 
   useEffect(() => {
     if (activeTab === "dashboard" && !dashboardData) {
-      fetch("http://localhost:3010/api/dashboard")
+      fetch(`${API_URL}/api/dashboard`)
         .then(res => res.json())
         .then(data => setDashboardData(data))
         .catch(console.error);
@@ -238,14 +240,14 @@ function App() {
                       setPortalLoading(true);
                       try {
                         const [empRes, ptoRes] = await Promise.all([
-                          fetch(`http://localhost:3010/api/employees/${portalEmployeeId}`),
-                          fetch(`http://localhost:3010/api/employees/${portalEmployeeId}/pto`),
+                          fetch(`${API_URL}/api/employees/${portalEmployeeId}`),
+                          fetch(`${API_URL}/api/employees/${portalEmployeeId}/pto`),
                         ]);
                         if (empRes.ok) {
                           const emp = await empRes.json();
                           const pto = ptoRes.ok ? await ptoRes.json() : [];
                           // Fetch payroll runs (filter client-side)
-                          const allRuns = await (await fetch("http://localhost:3010/api/payroll-runs")).json();
+                          const allRuns = await (await fetch(`${API_URL}/api/payroll-runs`)).json();
                           const empRuns = allRuns.filter((r: { id: string }) => r.id.includes(portalEmployeeId.slice(0, 8)));
                           setPortalData({ employee: emp, ptoBalances: pto, payrollRuns: empRuns.slice(0, 12), bonuses: [] });
                         }

@@ -1,5 +1,5 @@
 {
-  "name": "@hasna/open-payroll",
+  "name": "@hasna/payroll",
   "version": "0.0.1",
   "description": "Open-source payroll management system for AI agents - CLI + MCP server + web dashboard",
   "type": "module",
@@ -48,7 +48,7 @@
     "dashboard"
   ],
   "publishConfig": {
-    "registry": "https://registry.npmjs.org",
+    "registry": "https://registry.bun.pm",
     "access": "public"
   },
   "repository": {

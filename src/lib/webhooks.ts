@@ -12,6 +12,55 @@ interface Webhook {
   updated_at: string;
 }
 
+// SSRF protection: block internal/private IPs and dangerous URLs
+function validateWebhookUrl(url: string): { valid: boolean; reason?: string } {
+  try {
+    const parsed = new URL(url);
+
+    // Only allow HTTPS in production
+    if (parsed.protocol !== "https:") {
+      return { valid: false, reason: "Webhook URLs must use HTTPS" };
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+
+    // Block localhost
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "0.0.0.0") {
+      return { valid: false, reason: "Webhook URLs cannot point to localhost" };
+    }
+
+    // Block private IP ranges
+    const privatePatterns = [
+      /^10\./,
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+      /^192\.168\./,
+      /^169\.254\./, // link-local (including AWS metadata)
+      /^127\./,
+      /^fc00:/,
+      /^fe80:/,
+      /^::1$/,
+    ];
+    if (privatePatterns.some((p) => p.test(hostname))) {
+      return { valid: false, reason: "Webhook URLs cannot point to private/internal networks" };
+    }
+
+    // Block AWS metadata endpoint
+    if (hostname.includes("169.254.169.254") || hostname.includes("metadata.google.internal")) {
+      return { valid: false, reason: "Webhook URLs cannot point to cloud metadata services" };
+    }
+
+    // Block internal hostnames that might leak info
+    const blocked = ["internal", "intranet", "private", "local", "localhost", "intranet"];
+    if (blocked.some((b) => hostname.includes(b))) {
+      return { valid: false, reason: "Webhook URLs cannot use reserved hostnames" };
+    }
+
+    return { valid: true };
+  } catch {
+    return { valid: false, reason: "Invalid webhook URL" };
+  }
+}
+
 export function createWebhook(input: {
   url: string;
   events: string[];
@@ -19,6 +68,12 @@ export function createWebhook(input: {
   active?: boolean;
   metadata?: Record<string, unknown>;
 }): Webhook {
+  // Validate URL for SSRF protection
+  const validation = validateWebhookUrl(input.url);
+  if (!validation.valid) {
+    throw new Error(`Invalid webhook URL: ${validation.reason}`);
+  }
+
   const db = getDatabase();
   const id = generateId("whk");
   const now = new Date().toISOString();
@@ -81,6 +136,14 @@ export function updateWebhook(id: string, input: Partial<{
   active: boolean;
   metadata: Record<string, unknown>;
 }>): Webhook | null {
+  // Validate URL for SSRF protection
+  if (input.url !== undefined) {
+    const validation = validateWebhookUrl(input.url);
+    if (!validation.valid) {
+      throw new Error(`Invalid webhook URL: ${validation.reason}`);
+    }
+  }
+
   const db = getDatabase();
   const existing = getWebhook(id);
   if (!existing) return null;
@@ -157,6 +220,14 @@ export async function triggerWebhooks(event: WebhookEvent, data: Record<string, 
 
   for (const webhook of matching) {
     try {
+      // Validate URL at trigger time for SSRF protection
+      const validation = validateWebhookUrl(webhook.url);
+      if (!validation.valid) {
+        console.warn(`Webhook ${webhook.id} blocked: ${validation.reason}`);
+        failed++;
+        continue;
+      }
+
       const body = JSON.stringify(payload);
 
       // Simple fetch - in production would add signature header verification

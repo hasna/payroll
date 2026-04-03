@@ -7,16 +7,46 @@ import { rateLimitMiddleware } from "../lib/rate-limit.js";
 
 const app = express();
 const PORT = process.env.PORT || 3010;
+const API_KEY = process.env.API_KEY;
+const CORS_ORIGINS = (process.env.CORS_ORIGINS || "http://localhost:5173,http://localhost:5174").split(",").map(s => s.trim());
 
 app.use(express.json());
 
-// CORS for dashboard
+// Sanitized error response helper
+function safeError(error: unknown): string {
+  if (error instanceof Error) {
+    // Don't leak internal stack traces or implementation details
+    return error.message;
+  }
+  return "An unexpected error occurred";
+}
+
+// CORS with restricted origins
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  const origin = req.headers.origin;
+  if (origin && CORS_ORIGINS.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
+  }
+  next();
+});
+
+// API key authentication middleware (optional - only required if API_KEY is set)
+app.use((req, res, next) => {
+  // Skip auth for health check and rate limit info
+  if (req.path === "/api/health" || req.path === "/api/rate-limit") {
+    return next();
+  }
+
+  if (API_KEY) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ") || authHeader.slice(7) !== API_KEY) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
   }
   next();
 });
@@ -25,13 +55,34 @@ app.use((req, res, next) => {
 const limiter = rateLimitMiddleware({ windowMs: 60 * 1000, maxRequests: 100 });
 app.use(limiter);
 
+// Health check (no auth required)
+app.get("/api/health", (req, res) => {
+  try {
+    const db = getDatabase();
+    db.query("SELECT 1").get();
+    res.json({ status: "healthy", timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: "unhealthy", error: "Database unavailable" });
+  }
+});
+
+// Rate limit info (no auth required)
+app.get("/api/rate-limit", (req, res) => {
+  res.json({
+    window_ms: 60000,
+    max_requests: 100,
+    info: "Rate limit headers (X-RateLimit-*) are included in all responses",
+  });
+});
+
 // Get all employees
 app.get("/api/employees", (req, res) => {
   try {
     const employees = listEmployees();
     res.json(employees);
   } catch (error) {
-    res.status(500).json({ error: String(error) });
+    console.error("Error fetching employees:", error);
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -41,7 +92,8 @@ app.get("/api/payroll-runs", (req, res) => {
     const runs = listPayrollRuns();
     res.json(runs);
   } catch (error) {
-    res.status(500).json({ error: String(error) });
+    console.error("Error fetching payroll runs:", error);
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -51,7 +103,8 @@ app.post("/api/employees", (req, res) => {
     const employee = createEmployee(req.body);
     res.status(201).json(employee);
   } catch (error) {
-    res.status(500).json({ error: String(error) });
+    console.error("Error creating employee:", error);
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -62,7 +115,8 @@ app.get("/api/employees/:id", (req, res) => {
     if (!emp) return res.status(404).json({ error: "Employee not found" });
     res.json(emp);
   } catch (error) {
-    res.status(500).json({ error: String(error) });
+    console.error("Error fetching employee:", error);
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -76,7 +130,8 @@ app.get("/api/employees/:id/pto", (req, res) => {
     `).all(req.params.id, year);
     res.json(balances);
   } catch (error) {
-    res.status(500).json({ error: String(error) });
+    console.error("Error fetching PTO balances:", error);
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -92,7 +147,8 @@ app.get("/api/employees/:id/payroll", (req, res) => {
     `).all(req.params.id);
     res.json(runs);
   } catch (error) {
-    res.status(500).json({ error: String(error) });
+    console.error("Error fetching payroll history:", error);
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -107,7 +163,8 @@ app.get("/api/stats", (req, res) => {
       totalPayrollRuns: runCount.count,
     });
   } catch (error) {
-    res.status(500).json({ error: String(error) });
+    console.error("Error fetching stats:", error);
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -172,30 +229,17 @@ app.get("/api/dashboard", (req, res) => {
 
     res.json({ payrollTrend, deptBreakdown, statusBreakdown, ptoSummary, monthlyPayroll });
   } catch (error) {
-    res.status(500).json({ error: String(error) });
+    console.error("Error fetching dashboard data:", error);
+    res.status(500).json({ error: safeError(error) });
   }
-});
-
-// Health check
-app.get("/api/health", (req, res) => {
-  try {
-    const db = getDatabase();
-    db.query("SELECT 1").get();
-    res.json({ status: "healthy", timestamp: new Date().toISOString() });
-  } catch (error) {
-    res.status(503).json({ status: "unhealthy", error: String(error) });
-  }
-});
-
-// Rate limit info
-app.get("/api/rate-limit", (req, res) => {
-  res.json({
-    window_ms: 60000,
-    max_requests: 100,
-    info: "Rate limit headers (X-RateLimit-*) are included in all responses",
-  });
 });
 
 app.listen(PORT, () => {
   console.log(`Payroll API server running on http://localhost:${PORT}`);
+  if (API_KEY) {
+    console.log("API key authentication: ENABLED");
+  } else {
+    console.log("WARNING: API key authentication is DISABLED (set API_KEY env var to enable)");
+  }
+  console.log(`CORS origins: ${CORS_ORIGINS.join(", ")}`);
 });

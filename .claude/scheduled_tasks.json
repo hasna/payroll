@@ -1,12 +1,3 @@
 {
-  "tasks": [
-    {
-      "id": "487e0ee2",
-      "cron": "* * * * *",
-      "prompt": "Continue working on open-payroll. Implement next OPE39 feature from list: pagination, webhooks, audit log, dry-run payroll, recurring scheduler, multi-org, fiscal zones, dashboard charts, PDF payslips, bank export, rate limiting, currency conversion, employee portal. Build features, test, commit when done.",
-      "createdAt": 1775208944027,
-      "recurring": true,
-      "sessionId": "a0252ee1-137f-4650-a9a0-8a2febeccff9"
-    }
-  ]
+  "tasks": []
 }
