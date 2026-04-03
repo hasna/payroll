@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "lib": ["ES2022"],
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "types": ["bun-types"]
+  },
+  "include": ["src/**/*", "dashboard/**/*"],
+  "exclude": ["node_modules", "dist", "dashboard/dist"]
+}

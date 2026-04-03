@@ -1,0 +1,31 @@
+{
+  "name": "@hasna/payroll-sdk",
+  "version": "0.1.0",
+  "description": "Agent SDK for @hasna/open-payroll payroll management — works with Claude, Codex, Gemini, or any AI agent",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "LICENSE", "README.md"],
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target bun && tsc --emitDeclarationOnly --outDir dist",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["payroll", "salary", "payments", "ai", "agent", "sdk", "claude", "codex", "gemini", "mcp"],
+  "publishConfig": { "access": "public" },
+  "repository": { "type": "git", "url": "https://github.com/hasna/open-payroll.git", "directory": "sdk" },
+  "homepage": "https://github.com/hasna/open-payroll",
+  "bugs": { "url": "https://github.com/hasna/open-payroll/issues" },
+  "author": "Andrei Hasna <andrei@hasna.com>",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/bun": "^1.2.4"
+  }
+}
