@@ -10,6 +10,8 @@ import {
   updateEmployee,
   deleteEmployee,
   countEmployees,
+  searchEmployees,
+  deleteEmployeesBulk,
 } from "../db/employees.js";
 import {
   createPayrollRun,
@@ -220,6 +222,30 @@ server.tool(
   async ({ project_id, status }) => {
     const count = countEmployees({ project_id, status });
     return { content: [{ type: "text", text: JSON.stringify({ count }) }] };
+  }
+);
+
+server.tool(
+  "search_employees",
+  "Search employees by name, email, department, or position",
+  {
+    query: z.string().describe("Search query"),
+  },
+  async ({ query }) => {
+    const employees = searchEmployees(query);
+    return { content: [{ type: "text", text: JSON.stringify(employees, null, 2) }] };
+  }
+);
+
+server.tool(
+  "delete_employees_bulk",
+  "Delete multiple employees at once",
+  {
+    ids: z.array(z.string()).describe("Array of employee IDs to delete"),
+  },
+  async ({ ids }) => {
+    const result = deleteEmployeesBulk(ids);
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   }
 );
 

@@ -314,6 +314,36 @@ export function deleteEmployee(id: string, db?: Database): void {
   d.run("DELETE FROM employees WHERE id = ?", [id]);
 }
 
+export function searchEmployees(query: string): Employee[] {
+  const d = getDatabase();
+  const searchTerm = `%${query}%`;
+
+  const rows = d.query(`
+    SELECT * FROM employees
+    WHERE first_name LIKE ?
+       OR last_name LIKE ?
+       OR email LIKE ?
+       OR department LIKE ?
+       OR position LIKE ?
+    ORDER BY first_name, last_name
+    LIMIT 50
+  `).all(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm) as EmployeeRow[];
+
+  return rows.map(rowToEmployee);
+}
+
+export function deleteEmployeesBulk(ids: string[]): { deleted: number; ids: string[] } {
+  const d = getDatabase();
+  let deleted = 0;
+
+  for (const id of ids) {
+    const result = d.run("DELETE FROM employees WHERE id = ?", [id]);
+    deleted += result.changes;
+  }
+
+  return { deleted, ids };
+}
+
 export function countEmployees(filter: EmployeeFilter = {}, db?: Database): number {
   const d = db || getDatabase();
 
