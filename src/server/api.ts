@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import express from "express";
-import { listEmployees, createEmployee } from "../db/employees.js";
+import { listEmployees, createEmployee, getEmployee } from "../db/employees.js";
 import { listPayrollRuns } from "../db/payroll-runs.js";
 import { getDatabase } from "../db/database.js";
 import { rateLimitMiddleware } from "../lib/rate-limit.js";
@@ -50,6 +50,47 @@ app.post("/api/employees", (req, res) => {
   try {
     const employee = createEmployee(req.body);
     res.status(201).json(employee);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get employee by ID (portal)
+app.get("/api/employees/:id", (req, res) => {
+  try {
+    const emp = getEmployee(req.params.id);
+    if (!emp) return res.status(404).json({ error: "Employee not found" });
+    res.json(emp);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get employee PTO balances (portal)
+app.get("/api/employees/:id/pto", (req, res) => {
+  try {
+    const db = getDatabase();
+    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const balances = db.query(`
+      SELECT * FROM pto_balances WHERE employee_id = ? AND year = ?
+    `).all(req.params.id, year);
+    res.json(balances);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get employee payroll history (portal)
+app.get("/api/employees/:id/payroll", (req, res) => {
+  try {
+    const db = getDatabase();
+    const runs = db.query(`
+      SELECT pr.period_start, pr.period_end, pr.total_gross, pr.total_net, pr.status
+      FROM payroll_runs pr
+      JOIN employees e ON e.project_id = pr.project_id
+      WHERE e.id = ? ORDER BY pr.run_date DESC LIMIT 24
+    `).all(req.params.id);
+    res.json(runs);
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
