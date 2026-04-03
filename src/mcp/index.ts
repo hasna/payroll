@@ -69,6 +69,10 @@ function success(data: unknown) {
   return json({ success: true, ...(data as object) });
 }
 
+function err(message: string) {
+  return json({ error: message });
+}
+
 // === AGENT AUTH TOOLS ===
 
 server.tool(
@@ -91,7 +95,7 @@ server.tool(
       return success({ id, name });
     } catch (e: unknown) {
       if (String(e).includes("UNIQUE constraint failed")) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: "Agent already exists", name }) }] };
+        return err(`Agent already exists: ${name}`);
       }
       throw e;
     }
@@ -300,7 +304,7 @@ server.tool(
       metadata: { source: "mcp" },
     });
     triggerWebhooks("employee.deleted", { employee_id: id }).catch(() => {});
-    return { content: [{ type: "text", text: JSON.stringify({ success: true, id }) }] };
+    return success({ id });
   }
 );
 
@@ -313,7 +317,7 @@ server.tool(
   },
   async ({ project_id, status }) => {
     const count = countEmployees({ project_id, status });
-    return { content: [{ type: "text", text: JSON.stringify({ count }) }] };
+    return json({ count });
   }
 );
 
@@ -458,7 +462,7 @@ server.tool(
   },
   async ({ id }) => {
     deletePayrollRun(id);
-    return { content: [{ type: "text", text: JSON.stringify({ success: true, id }) }] };
+    return success({ id });
   }
 );
 
@@ -530,7 +534,7 @@ server.tool(
   { id: z.string().describe("Bonus ID") },
   async ({ id }) => {
     deleteBonus(id);
-    return { content: [{ type: "text", text: JSON.stringify({ success: true, id }) }] };
+    return success({ id });
   }
 );
 
@@ -660,7 +664,7 @@ server.tool(
       const result = convertCurrency(amount, from_currency, to_currency);
       return json(result);
     } catch (e) {
-      return { content: [{ type: "text", text: JSON.stringify({ error: String(e) }) }] };
+      return err(String(e));
     }
   }
 );
@@ -691,7 +695,7 @@ server.tool(
       const result = generateAchFromPayrollRun(payroll_run_id, company_name, company_identification, originating_dfi_identification);
       return json(result);
     } catch (e) {
-      return { content: [{ type: "text", text: JSON.stringify({ error: String(e) }) }] };
+      return err(String(e));
     }
   }
 );
@@ -711,7 +715,7 @@ server.tool(
       const base64 = Buffer.from(pdfBytes).toString("base64");
       return json({ success: true, payroll_run_id, employee_id, pdf_base64: base64, size_bytes: pdfBytes.length });
     } catch (e) {
-      return { content: [{ type: "text", text: JSON.stringify({ error: String(e) }) }] };
+      return err(String(e));
     }
   }
 );
@@ -744,13 +748,13 @@ server.tool(
       totalEmployees += run.total_employees;
     }
 
-    return { content: [{ type: "text", text: JSON.stringify({
+    return json({
       total_runs: runs.length,
       total_gross: totalGross,
       total_deductions: totalDeductions,
       total_net: totalNet,
       total_employees_paid: totalEmployees,
-    }, null, 2) }] };
+    });
   }
 );
 
@@ -783,7 +787,7 @@ server.tool(
       const zone = getFiscalZone(fiscal_zone_id);
       if (!zone) return notFound("FiscalZone", id);
       const tax = computeTax(totalGross, zone);
-      return { content: [{ type: "text", text: JSON.stringify({
+      return json({
         employee: { id: emp.id, name: `${emp.first_name} ${emp.last_name}` },
         period: { start: period_start, end: period_end },
         fiscal_zone: { id: zone.id, country: zone.country, tax_year: zone.tax_year },
@@ -800,7 +804,7 @@ server.tool(
           },
           net_pay: tax.net,
         },
-      }, null, 2) }] };
+      });
     }
 
     // Fallback to default calculation
@@ -810,7 +814,7 @@ server.tool(
     const totalDeductions = federalTax + socialSecurity + medicare;
     const netPay = totalGross - totalDeductions;
 
-    return { content: [{ type: "text", text: JSON.stringify({
+    return json({
       employee: { id: emp.id, name: `${emp.first_name} ${emp.last_name}` },
       period: { start: period_start, end: period_end },
       breakdown: {
@@ -825,7 +829,7 @@ server.tool(
         },
         net_pay: netPay,
       },
-    }, null, 2) }] };
+    });
   }
 );
 
@@ -884,7 +888,7 @@ server.tool(
   { id: z.string().describe("Organization ID") },
   async ({ id }) => {
     const org = getOrganization(id);
-    if (!org) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
+    if (!org) return err("Organization not found");
     return json(org);
   }
 );
@@ -902,7 +906,7 @@ server.tool(
   },
   async ({ id, ...input }) => {
     const org = updateOrganization(id, input);
-    if (!org) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
+    if (!org) return err("Organization not found");
     return json(org);
   }
 );
@@ -963,7 +967,7 @@ server.tool(
   { id: z.string().describe("Fiscal zone ID") },
   async ({ id }) => {
     const zone = getFiscalZone(id);
-    if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
+    if (!zone) return err("Fiscal zone not found");
     return json(zone);
   }
 );
@@ -982,7 +986,7 @@ server.tool(
   },
   async ({ id, ...input }) => {
     const zone = updateFiscalZone(id, input);
-    if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
+    if (!zone) return err("Fiscal zone not found");
     return json(zone);
   }
 );
@@ -1006,7 +1010,7 @@ server.tool(
   },
   async ({ gross, fiscal_zone_id }) => {
     const zone = getFiscalZone(fiscal_zone_id);
-    if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "Fiscal zone not found" }) }] };
+    if (!zone) return err("Fiscal zone not found");
     const result = computeTax(gross, zone);
     return json({ zone: zone.country, tax_year: zone.tax_year, ...result });
   }
@@ -1021,7 +1025,7 @@ server.tool(
   },
   async ({ country, tax_year }) => {
     const zone = getOrCreateDefaultZone(country, tax_year);
-    if (!zone) return { content: [{ type: "text", text: JSON.stringify({ error: "No default zone for country" }) }] };
+    if (!zone) return err("No default zone found for country");
     return json({ created: true, zone });
   }
 );
@@ -1068,7 +1072,7 @@ server.tool(
   { id: z.string().describe("Schedule ID") },
   async ({ id }) => {
     const schedule = getScheduledPayroll(id);
-    if (!schedule) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
+    if (!schedule) return err("Scheduled payroll not found");
     return json(schedule);
   }
 );
@@ -1089,7 +1093,7 @@ server.tool(
   },
   async ({ id, ...input }) => {
     const schedule = updateScheduledPayroll(id, input);
-    if (!schedule) return { content: [{ type: "text", text: JSON.stringify({ error: "Not found" }) }] };
+    if (!schedule) return err("Scheduled payroll not found");
     return json(schedule);
   }
 );
