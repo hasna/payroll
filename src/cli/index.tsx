@@ -190,16 +190,12 @@ program
       const resolvedId = resolveEmployeeId(id);
       const employee = getEmployee(resolvedId);
 
-      if (!employee) {
-        console.error(chalk.red(`Employee not found: ${id}`));
-        process.exit(1);
-      }
-
       if (globalOpts.json) {
         console.log(JSON.stringify(employee, null, 2));
         return;
       }
 
+      const statusFn = statusColors[employee.status] || chalk.white;
       console.log(chalk.bold("\nEmployee Details:\n"));
       console.log(`  ${chalk.dim("ID:")}           ${employee.id}`);
       console.log(`  ${chalk.dim("Name:")}         ${employee.first_name} ${employee.last_name}`);
@@ -207,7 +203,7 @@ program
       console.log(`  ${chalk.dim("Phone:")}        ${employee.phone || "-"}`);
       console.log(`  ${chalk.dim("Department:")}   ${employee.department || "-"}`);
       console.log(`  ${chalk.dim("Position:")}     ${employee.position || "-"}`);
-      console.log(`  ${chalk.dim("Status:")}       ${(statusColors[employee.status] || chalk.white)(employee.status)}`);
+      console.log(`  ${chalk.dim("Status:")}       ${statusFn(employee.status)}`);
       console.log(`  ${chalk.dim("Type:")}        ${employee.employment_type}`);
       if (employee.base_salary) console.log(`  ${chalk.dim("Salary:")}      $${employee.base_salary.toLocaleString()}`);
       if (employee.hourly_rate) console.log(`  ${chalk.dim("Hourly:")}      $${employee.hourly_rate}/hr`);
@@ -237,8 +233,7 @@ program
       const resolvedId = resolveEmployeeId(id);
       const existing = getEmployee(resolvedId);
       if (!existing) {
-        console.error(chalk.red(`Employee not found: ${id}`));
-        process.exit(1);
+        handleError(`Employee not found: ${id}`);
       }
 
       const employee = updateEmployee(resolvedId, {
